@@ -72,7 +72,7 @@ export VERBOSE = yes
 # 836832 6e
 export XZ_OPT = -6e
 
-old_NEWS_hash = 31db53b519338cc4b1527a682e88493f
+old_NEWS_hash = b7391a776a50090561bfd41cb2fdb3a1
 
 # Many m4 macros names once began with 'jm_'.
 # Make sure that none are inadvertently reintroduced.
@@ -305,6 +305,9 @@ sc_prohibit_operator_at_end_of_line:
 	halt='found operator at end of line'				\
 	  $(_sc_search_regexp)
 
+# Add an exemption for sc_makefile_at_at_check.
+_makefile_at_at_check_exceptions = ' && !/MAKEINFO/'
+
 update-copyright-env = \
   UPDATE_COPYRIGHT_USE_INTERVALS=2 \
   UPDATE_COPYRIGHT_MAX_LINE_LENGTH=79
@@ -330,7 +333,8 @@ exclude_file_name_regexp--sc_prohibit_empty_lines_at_EOF = \
   ^testsuite/(bkslashes.good|(noeolw?|empty|zero-anchor)\.(2?good|inp))$$
 
 # Exempt test-related files from our 80-column limitation, for now.
-exclude_file_name_regexp--sc_long_lines = (^testsuite/|/help2man$$)
+exclude_file_name_regexp--sc_long_lines = \
+  (^testsuite/|/help2man$$|^bootstrap$$)
 
 # Exempt test-related files from space-before-parens requirements.
 exclude_file_name_regexp--sc_space_before_open_paren = ^testsuite/
