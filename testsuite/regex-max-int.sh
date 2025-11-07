@@ -1,7 +1,7 @@
 #!/bin/sh
 # Test regex on input buffers larger than 2GB
 
-# Copyright (C) 2018-2024 Free Software Foundation, Inc.
+# Copyright (C) 2018-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ sed: regex input buffer length larger than INT_MAX
 EOF
 
 
-# Before sed-4.5, this was silently a no-op: would not perform the subsitution
+# Before sed-4.5, this was silently a no-op: would not perform the substitution
 # but would not indicate any error either (https://bugs.gnu.org/30520).
 # Exit code 4 is "panic".
 returns_ 4 sed 's/a/b/g' input >/dev/null 2>err1 || fail=1

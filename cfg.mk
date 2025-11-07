@@ -1,5 +1,5 @@
 # Customize maint.mk                           -*- makefile -*-
-# Copyright (C) 2009-2024 Free Software Foundation, Inc.
+# Copyright (C) 2009-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -305,6 +305,9 @@ sc_prohibit_operator_at_end_of_line:
 	halt='found operator at end of line'				\
 	  $(_sc_search_regexp)
 
+# Write base64-encoded (not hex) checksums into the announcement.
+announce_gen_args = --cksum-checksums
+
 # Add an exemption for sc_makefile_at_at_check.
 _makefile_at_at_check_exceptions = ' && !/MAKEINFO/'
 
@@ -405,3 +408,7 @@ build-ubsan:
 	    { echo "./configure script not found" >&2; exit 1; }
 	./configure CFLAGS="$(UBSAN_CFLAGS)" LDFLAGS="$(UBSAN_LDFLAGS)"
 	make
+
+exclude_file_name_regexp--sc_codespell = \
+  ^(THANKS\.in|testsuite/(8bit|mac-mf)\..+)$$
+codespell_ignore_words_list = ket,tre,debbugs,fo,2Rd,jaques,hel,te,bu,readin

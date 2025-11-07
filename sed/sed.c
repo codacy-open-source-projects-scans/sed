@@ -1,5 +1,5 @@
 /*  GNU SED, a batch stream editor.
-    Copyright (C) 1989-2024 Free Software Foundation, Inc.
+    Copyright (C) 1989-2025 Free Software Foundation, Inc.
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@ bool separate_files = false;
 /* If set, follow symlinks when processing in place */
 bool follow_symlinks = false;
 
-/* If set, opearate in 'sandbox' mode */
+/* If set, operate in 'sandbox' mode */
 bool sandbox = false;
 
 /* if set, print debugging information */
@@ -240,6 +240,7 @@ main (int argc, char **argv)
 
   /* Tell program which translations to use and where to find.  */
   bindtextdomain (PACKAGE, LOCALEDIR);
+  bindtextdomain ("gnulib", GNULIB_LOCALEDIR);
   textdomain (PACKAGE);
 #endif
 

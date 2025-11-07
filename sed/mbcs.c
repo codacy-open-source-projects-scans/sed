@@ -1,5 +1,5 @@
 /*  GNU SED, a batch stream editor.
-    Copyright (C) 2003-2024 Free Software Foundation, Inc.
+    Copyright (C) 2003-2025 Free Software Foundation, Inc.
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ bool is_utf8;
 
    Return zero in all other cases:
     CH is a valid single-byte character (e.g. 0x01-0x7F in UTF-8 locales);
-    CH is an invalid byte in a multibyte sequence for the currentl locale,
+    CH is an invalid byte in a multibyte sequence for the current locale,
     CH is the NUL byte.
 
    Reset CUR_STAT in the case of an invalid byte.

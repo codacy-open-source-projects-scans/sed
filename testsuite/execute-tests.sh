@@ -1,7 +1,7 @@
 #!/bin/sh
 # Test execution less-common cases
 
-# Copyright (C) 2016-2024 Free Software Foundation, Inc.
+# Copyright (C) 2016-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -40,17 +40,17 @@ echo "printf a" | sed '1e' > out3 || fail=1
 compare_ exp3 out3 || fail=1
 
 #
-# plain 'e' with a command that returns delimted '\n' output
+# plain 'e' with a command that returns delimited '\n' output
 # (implementation note: the delimiter is first chomp'd)
 printf "a\n" > exp4 || framework_failure_
 echo "echo a" | sed '1e' > out4 || fail=1
 compare_ exp4 out4 || fail=1
 
 #
-# e with a command that returns delimted '\0' output
+# e with a command that returns delimited '\0' output
 #
 printf "b\0" > exp5 || framework_failure_
-# This input file contains the shell command to be excuted:
+# This input file contains the shell command to be executed:
 printf 'cat exp5' > in5 || framework_failure_
 sed -z '1e' <in5 > out5 || fail=1
 compare_ exp5 out5 || fail=1

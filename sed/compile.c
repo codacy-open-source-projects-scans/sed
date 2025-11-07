@@ -1,5 +1,5 @@
 /*  GNU SED, a batch stream editor.
-    Copyright (C) 1989-2024 Free Software Foundation, Inc.
+    Copyright (C) 1989-2025 Free Software Foundation, Inc.
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -449,7 +449,7 @@ snarf_char_class (struct buffer *b, mbstate_t *cur_stat)
 }
 
 static struct buffer *
-match_slash (int slash, int regex)
+match_slash (int slash, bool regex, bool s_command)
 {
   struct buffer *b;
   int ch;
@@ -475,8 +475,25 @@ match_slash (int slash, int regex)
               ch = inchar ();
               if (ch == EOF)
                 break;
-              else if (ch != '\n' && (ch != slash || (!regex && ch == '&')))
+              /* Preserve backslash except when escaping delimiter in regex. */
+              if (ch != '\n' && (ch != slash || (!regex && ch == '&')))
                 add1_buffer (b, '\\');
+              /* Special case: in regex, treat \cX as atomic escape,
+                 but only in GNU-extension mode (not strict POSIX).  */
+              if (regex && ch == 'c' && posixicity != POSIXLY_BASIC) {
+                add1_buffer (b, ch);
+                int next = inchar ();
+                if (next == EOF)
+                  break;
+                add1_buffer (b, next);
+                /* Skip end-of-loop add1_buffer, we already did it.  */
+                continue;
+              }
+              if (s_command && posixicity != POSIXLY_EXTENDED && ch != '&'
+                  && ch != '\\' && !ISDIGIT (ch) && ch != '\n' && ch != slash)
+                fprintf (stderr, _("%s: warning: using \"\\%c\" in the 's' "
+                                   "command is not portable\n"),
+                         program_name, ch);
             }
           else if (ch == OPEN_BRACKET && regex)
             {
@@ -821,7 +838,7 @@ compile_address (struct addr *addr, int ch)
       addr->addr_type = ADDR_IS_REGEX;
       if (ch == '\\')
         ch = inchar ();
-      if ( !(b = match_slash (ch, true)) )
+      if ( !(b = match_slash (ch, true, false)) )
         bad_prog ("unterminated address regex");
 
       for (;;)
@@ -1147,9 +1164,9 @@ compile_program (struct vector *vector)
             int slash;
 
             slash = inchar ();
-            if ( !(b  = match_slash (slash, true)) )
+            if ( !(b  = match_slash (slash, true, true)) )
               bad_prog ("unterminated 's' command");
-            if ( !(b2 = match_slash (slash, false)) )
+            if ( !(b2 = match_slash (slash, false, true)) )
               bad_prog ("unterminated 's' command");
 
             cur_cmd->x.cmd_subst = OB_MALLOC (&obs, 1, struct subst);
@@ -1175,12 +1192,12 @@ compile_program (struct vector *vector)
             char *src_buf, *dest_buf;
 
             slash = inchar ();
-            if ( !(b = match_slash (slash, false)) )
+            if ( !(b = match_slash (slash, false, false)) )
               bad_prog ("unterminated 'y' command");
             src_buf = get_buffer (b);
             len = normalize_text (src_buf, size_buffer (b), TEXT_BUFFER);
 
-            if ( !(b2 = match_slash (slash, false)) )
+            if ( !(b2 = match_slash (slash, false, false)) )
               bad_prog ("unterminated 'y' command");
             dest_buf = get_buffer (b2);
             dest_len = normalize_text (dest_buf, size_buffer (b2), TEXT_BUFFER);
@@ -1329,11 +1346,7 @@ normalize_text (char *buf, idx_t len, enum text_types buftype)
       if (*p == '\\' && p+1 < bufend && bracket_state == 0)
         switch (*++p)
           {
-#if defined __STDC__ && __STDC__-0
           case 'a': *q++ = '\a'; p++; continue;
-#else /* Not STDC; we'll just assume ASCII */
-          case 'a': *q++ = '\007'; p++; continue;
-#endif
           /* case 'b': *q++ = '\b'; p++; continue; --- conflicts with \b RE */
           case 'f': *q++ = '\f'; p++; continue;
           case '\n': /*fall through */

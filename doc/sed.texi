@@ -34,7 +34,7 @@
 This file documents version @value{VERSION} of
 @value{SSED}, a stream editor.
 
-Copyright @copyright{} 1998--2024 Free Software Foundation, Inc.
+Copyright @copyright{} 1998--2025 Free Software Foundation, Inc.
 
 @quotation
 Permission is granted to copy, distribute and/or modify this document
@@ -633,10 +633,16 @@ sed -e '/^foo/d' -f script2.sed input.txt > output.txt
 
 @cindex @command{a}, and semicolons
 @cindex @command{c}, and semicolons
+@cindex @command{e}, and semicolons
 @cindex @command{i}, and semicolons
-Commands @command{a}, @command{c}, @command{i}, due to their syntax,
-cannot be followed by semicolons working as command separators and
-thus should be terminated
+@cindex @command{r}, and semicolons
+@cindex @command{R}, and semicolons
+@cindex @command{w}, and semicolons
+@cindex @command{W}, and semicolons
+Commands @command{a}, @command{c}, @command{e}, @command{i},
+@command{r}, @command{R}, @command{w}, @command{W}, due to their
+syntax, cannot be followed by semicolons working as command separators
+and thus should be terminated
 with newlines or be placed at the end of a @var{script} or @var{script-file}.
 Commands can also be preceded with optional non-significant
 whitespace characters.
@@ -2463,14 +2469,17 @@ $ seq 10 | sed -n '6,~4p'
 @node Zero Address
 @section Zero Address
 @cindex Zero Address
-As a @value{SSED} extension, @code{0} address can be used in two cases:
+As a @value{SSED} extension, @code{0} address can be used in these cases:
 @enumerate
 @item
-In a regex range addresses as @code{0,/@var{regexp}/}
+In a regex range address as @code{0,/@var{regexp}/}
 (@pxref{Zero Address Regex Range}).
 @item
 With the @code{r} command, inserting a file before the first line
 (@pxref{Adding a header to multiple files}).
+@item
+As the starting address in the @var{first}~@var{step} extension
+(@pxref{Numeric Addresses}).
 @end enumerate
 
 Note that these are the only places where the @code{0} address makes
@@ -3344,7 +3353,7 @@ the existing ``word boundary'' meaning.
 
 @value{SSED} processes escape sequences @emph{before} passing
 the text onto the regular-expression matching of the @command{s///} command
-and Address matching. Thus the following two commands are equivalent
+and address matching. Thus the following two commands are equivalent
 (@samp{0x5e} is the hexadecimal @sc{ascii} value of the character @samp{^}):
 
 @codequoteundirected on
@@ -3369,9 +3378,9 @@ As are the following (@samp{0x5b},@samp{0x5d} are the hexadecimal
 @example
 @group
 $ echo abc | sed 's/[a]/x/'
-Xbc
+xbc
 $ echo abc | sed 's/\x5ba\x5d/x/'
-Xbc
+xbc
 @end group
 @end example
 @codequoteundirected off
@@ -4107,8 +4116,8 @@ all lines except the last, @code{N} appends the line to the pattern
 space.  A substitution command then removes soft line breaks
 (@samp{=} at the end of a line, i.e. followed by a newline) by replacing
 them with an empty string.
-@emph{if} the substitution was successful (meaning the pattern space contained
-a line which should be joined), The conditional branch command @code{t} jumps
+@emph{If} the substitution was successful (meaning the pattern space contained
+a line which should be joined), the conditional branch command @code{t} jumps
 to the beginning of the program without completing or restarting the cycle.
 If the substitution failed (meaning there were no soft line breaks),
 The @code{t} command will @emph{not} branch. Then, @code{P} will

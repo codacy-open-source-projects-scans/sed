@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # Test misc.
 
-# Copyright (C) 2017-2024 Free Software Foundation, Inc.
+# Copyright (C) 2017-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -1199,6 +1199,22 @@ s,.*[^\/],,
      ['bug30794_3', "s/z/\\\\x5c1/",  {IN=>'z'}, {OUT => "\\1"}],
 
      ['bug40242', q('sn\nnXn'),  {IN=>'n'}, {OUT => 'X'}],
+
+     # sed 's/\c[//' is valid, but was rejected by sed-4.9 and prior
+     ['bug79519_1', q('s/\c[//'), {IN=>"a\eb"}, {OUT => 'ab'}],
+     # Exercise in a bracket expression.
+     ['bug79519_2', q('s/[\c[a]//g'), {IN=>"a\ebc"}, {OUT => 'bc'}],
+     # With --posix, \c is treated like 'c'
+     ['bug79519_3', qw(--posix), q('s/[\c[a]//g'), {IN=>"a\ebc"}, {OUT => "\eb"}],
+     # Exercise in a search (non-subst) regexp:
+     ['bug79519_4', q('/\c[/d'), {IN=>"a\e\nc\n"}, {OUT => "c\n"}],
+     # sed --posix must reject, since \cX is a GNU-only feature.
+     ['bug79519_fail', qw(--posix), q('s/\c[//'), {IN=>"x"}, {OUT => ''},
+      {ERR => "sed: warning: using \"\\c\" in the 's' command is not portable\n"
+	   . "sed: -e expression #1, char 7: unterminated 's' command\n"
+      },
+      {EXIT => 1},
+     ],
     );
 
 my $save_temps = $ENV{SAVE_TEMPS};

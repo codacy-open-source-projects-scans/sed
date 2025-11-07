@@ -1,7 +1,7 @@
 #!/bin/sh
 # Test compilation errors
 
-# Copyright (C) 2016-2024 Free Software Foundation, Inc.
+# Copyright (C) 2016-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -259,7 +259,7 @@ returns_ 1 sed 'y/a/a' </dev/null 2>err-unterm-y5 || fail=1
 compare_ exp-unterm-y err-unterm-y5 || fail=1
 
 #
-# Y command with bad legth (Y_CMD_LEN)
+# Y command with bad length (Y_CMD_LEN)
 # TODO: check with multibyte strings.
 cat <<\EOF >exp-bad-y-len || framework_failure_
 sed: -e expression #1, char 7: 'y' command strings have different lengths

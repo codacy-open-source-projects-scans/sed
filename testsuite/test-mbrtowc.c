@@ -1,5 +1,5 @@
 /* Auxiliary program to test mbrtowc(3) behaviour.
-   Copyright 2016-2024 Free Software Foundation, Inc.
+   Copyright 2016-2025 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
    along with this program; If not, see <https://www.gnu.org/licenses/>. */
 
 /* Test the operating-system's native mbrtowc(3) function,
-   by feeding it multibyte seqeunces one byte at a time,
+   by feeding it multibyte sequences one byte at a time,
    and reporting the result.
 
    The program prints the following values after each mbrtowc invocation,
@@ -83,7 +83,7 @@
     $ printf '\203\133' | LC_ALL=ja_JP.SJIS test-mbrtowc
     -2,1
 
-  The follwing is an INVALID multibyte sequence in SHIFT-JIS
+  The following is an INVALID multibyte sequence in SHIFT-JIS
   (The byte ':' is not valid as a second octet).
   Buggy implementations will accept this as a valid multibyte sequence:
 
@@ -102,7 +102,7 @@
   ---------------------------------------------
 
   In GNU Sed some tests purposely use invalid multibyte sequences
-  to test sed's behaviour. A buggy implemetation of mbrtowc
+  to test sed's behaviour. A buggy implementation of mbrtowc
   would result in false-alarm failures.
 
   The following are expected results in correct implementations:

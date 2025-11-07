@@ -2,7 +2,7 @@
 
 # Test runner for the old 'distrib' test
 
-# Copyright (C) 2017-2024 Free Software Foundation, Inc.
+# Copyright (C) 2017-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -103,7 +103,7 @@ Approved: alt.buddha.short.fat.guy@cygnus.com
            shine of the sea:
     Breath and bloom, shade and shine, -- wonder,
         wealth, and -- how far above them --
-          Truth, thats brighter than gem,
+          Truth, that's brighter than gem,
           Trust, that's purer than pearl, --
     Brightest truth, purest trust in the universe --
               all were for me

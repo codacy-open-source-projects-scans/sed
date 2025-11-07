@@ -1,7 +1,7 @@
 #!/bin/sh
 # Test Substitute options (for code-coverage purposes as well)
 
-# Copyright (C) 2016-2024 Free Software Foundation, Inc.
+# Copyright (C) 2016-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -91,7 +91,7 @@ compare_ subst-exp2 subst-out2 || fail=1
 #
 # Multiline modifier: s///m
 # ('N' will read and concatenate the second line
-#  into the patten space, making it "foo\nbar".
+#  into the pattern space, making it "foo\nbar".
 #  s// will then operate on it as one string).
 printf "foo\nbar\n" > subst-in3 || fail=1
 printf "Xoo\nXar\n" > subst-exp3 || fail=1

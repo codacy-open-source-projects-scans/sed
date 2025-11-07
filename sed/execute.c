@@ -1,5 +1,5 @@
 /*  GNU SED, a batch stream editor.
-    Copyright (C) 1989-2024 Free Software Foundation, Inc.
+    Copyright (C) 1989-2025 Free Software Foundation, Inc.
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -664,9 +664,9 @@ closedown (struct input *input)
       if (fchown (output_fd, input->st.st_uid, input->st.st_gid) == -1)
         ignore_value (fchown (output_fd, -1, input->st.st_gid));
 #endif
-      copy_acl (input->in_file_name, input_fd,
-                input->out_file_name, output_fd,
-                input->st.st_mode);
+      xcopy_acl (input->in_file_name, input_fd,
+                 input->out_file_name, output_fd,
+                 input->st.st_mode);
 
       ck_fclose (input->fp);
       ck_fclose (output_file.fp);
@@ -936,11 +936,7 @@ do_list (intmax_t line_len)
       } else {
           *o++ = '\\';
           switch (*p) {
-#if defined __STDC__ && __STDC__-0
             case '\a': *o++ = 'a'; break;
-#else /* Not STDC; we'll just assume ASCII */
-            case 007:  *o++ = 'a'; break;
-#endif
             case '\b': *o++ = 'b'; break;
             case '\f': *o++ = 'f'; break;
             case '\n': *o++ = 'n'; break;

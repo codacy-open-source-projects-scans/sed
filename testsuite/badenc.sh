@@ -2,7 +2,7 @@
 
 # Test runner for old 'badenc' test
 
-# Copyright (C) 2017-2024 Free Software Foundation, Inc.
+# Copyright (C) 2017-2025 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@ printf "abc\nde\320f\nghi\njkl\nmno\npqr\nstu\nvwx\nyz\n" > badenc-inp \
     || framework_failure_
 
 
-# The progarm: using 'z' to clear the pattern-space even
+# The program: using 'z' to clear the pattern-space even
 # if it contains invalid multibyte sequences.
 # Using 's/.*//' would not be able to clear the pattern-space.
 cat << \EOF > badenc.sed || framework_failure_
