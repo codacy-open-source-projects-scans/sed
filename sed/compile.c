@@ -589,7 +589,7 @@ mark_subst_opts (struct subst *cmd)
 
       default:
         bad_prog ("unknown option to 's'");
-        /*NOTREACHED*/
+        unreachable ();
       }
 }
 
@@ -1291,11 +1291,11 @@ compile_program (struct vector *vector)
 
         case EOF:
           bad_prog ("missing command");
-          /*NOTREACHED*/
+          unreachable ();
 
         default:
           bad_prog ("unknown command: '%c'", ch);
-          /*NOTREACHED*/
+          unreachable ();
         }
 
       /* this is buried down here so that "continue" statements will miss it */

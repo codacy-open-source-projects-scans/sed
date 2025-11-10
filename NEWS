@@ -5,6 +5,7 @@ GNU sed NEWS                                    -*- outline -*-
 ** Bug fixes
 
   sed no longer rejects "\c[" in regular expressions
+  [bug present since the beginning]
 
   'sed --follow-symlinks -i' no longer mishandles an operand that is a
   short symbolic link to a long symbolic link to a file.

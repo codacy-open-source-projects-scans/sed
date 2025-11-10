@@ -827,8 +827,7 @@ match_an_address_p (struct addr *addr, struct input *input)
     default:
       panic ("INTERNAL ERROR: bad address type");
     }
-  /*NOTREACHED*/
-  return false;
+  unreachable ();
 }
 
 /* return non-zero if current address is valid for cmd */
