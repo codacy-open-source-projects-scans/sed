@@ -219,7 +219,6 @@
 /stdlib.c
 /stdlib.h
 /stdlib.in.h
-/streq.h
 /strerror-override.c
 /strerror-override.h
 /strerror.c
@@ -290,4 +289,8 @@
 /issymlink.c
 /issymlink.h
 /stdio-consolesafe.c
-/string.c
+/strncpy.c
+/memeq.c
+/streq-opt.h
+/streq.c
+/strnul.c

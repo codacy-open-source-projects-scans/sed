@@ -279,7 +279,10 @@
 /gettext_h.m4
 /mkfifo.m4
 /stdckdint_h.m4
-/stringeq.m4
 /trunc.m4
 /truncl.m4
 /unitypes_h.m4
+/strncpy.m4
+/memeq.m4
+/stdcountof_h.m4
+/streq.m4

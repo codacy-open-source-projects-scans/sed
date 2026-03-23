@@ -296,7 +296,10 @@ static void
 line_reset (struct line *buf, struct line *state)
 {
   if (buf->alloc == 0)
-    line_init (buf, state, INITIAL_BUFFER_SIZE);
+    {
+      free (buf->text);
+      line_init (buf, state, INITIAL_BUFFER_SIZE);
+    }
   else
     {
       buf->length = 0;
