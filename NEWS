@@ -4,6 +4,25 @@ GNU sed NEWS                                    -*- outline -*-
 
 ** Bug fixes
 
+  In --posix mode, sed no longer mishandles backslash escapes (\n,
+  \t, \a, etc.) after a named character class like [[:alpha:]].
+  For example, 's/^A\n[[:alpha:]]\n*/XXX/' would fail to match the
+  trailing newline, treating \n as a literal backslash and an 'n'
+  rather than a newline.  This happened when an earlier backslash
+  escape in the same regex had already been converted, shifting the
+  in-place normalization buffer.
+  [bug introduced in sed 4.9]
+
+  sed --debug no longer crashes when a label (":") command is compiled
+  before the --debug option is processed, e.g., sed -f<(...) --debug.
+  [bug introduced in sed 4.7 with --debug]
+
+  sed no longer rejects the documented GNU extension 'a**' (equivalent
+  to 'a*') in Basic Regular Expression (BRE) mode.  Previously, this
+  worked only with -E (ERE mode), even though grep has always accepted
+  it in BRE mode.
+  [bug present since "the beginning"]
+
   sed no longer rejects "\c[" in regular expressions
   [bug present since the beginning]
 

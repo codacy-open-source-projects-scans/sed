@@ -101,7 +101,7 @@ compare_ exp-bad-bang err-bad-bang || fail=1
 #
 # GNU extension commands, not accepted in --posix mode
 # (bad_command(OPT))
-for opt in e F v z L Q T R W ;
+for opt in e F v z Q T R W ;
 do
     cat <<EOF >exp-posix-cmd-$opt || framework_failure_
 sed: -e expression #1, char 2: unknown command: '$opt'

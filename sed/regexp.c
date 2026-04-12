@@ -52,6 +52,11 @@ compile_regex_1 (struct regex *new_regex, int needed_sub)
   syntax &= ~RE_DOT_NOT_NULL;
   syntax |= RE_NO_POSIX_BACKTRACKING;
 
+  /* As a GNU extension (for BRE), allow 'a**' to mean 'a*',
+     just as grep does via RE_SYNTAX_GREP.  */
+  if (!(extended_regexp_flags & REG_EXTENDED))
+    syntax &= ~RE_CONTEXT_INVALID_DUP;
+
   switch (posixicity)
     {
     case POSIXLY_EXTENDED:
@@ -63,7 +68,7 @@ compile_regex_1 (struct regex *new_regex, int needed_sub)
     case POSIXLY_BASIC:
       syntax |= RE_UNMATCHED_RIGHT_PAREN_ORD | RE_NO_GNU_OPS;
       if (!(extended_regexp_flags & REG_EXTENDED))
-        syntax |= RE_LIMITED_OPS;
+        syntax |= RE_LIMITED_OPS | RE_CONTEXT_INVALID_DUP;
       break;
     }
 

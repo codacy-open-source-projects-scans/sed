@@ -362,10 +362,7 @@ next_cmd_entry (struct vector *v)
     v->v = xpalloc (v->v, &v->v_allocated, 1, -1, sizeof *v->v);
 
   cmd = v->v + v->v_length;
-  cmd->a1 = NULL;
-  cmd->a2 = NULL;
-  cmd->range_state = RANGE_INACTIVE;
-  cmd->addr_bang = false;
+  memset (cmd, 0, sizeof *cmd);
   cmd->cmd = '\0';	/* something invalid, to catch bugs early */
 
   return cmd;
@@ -972,7 +969,7 @@ compile_program (struct vector *vector)
       if (posixicity == POSIXLY_BASIC)
        switch (ch)
          {
-           case 'e': case 'F': case 'v': case 'z': case 'L':
+           case 'e': case 'F': case 'v': case 'z':
            case 'Q': case 'T': case 'R': case 'W':
              bad_prog ("unknown command: '%c'", ch);
              FALLTHROUGH;
@@ -1093,7 +1090,6 @@ compile_program (struct vector *vector)
             bad_prog ("command only uses one address");
           FALLTHROUGH;
 
-        case 'L':
         case 'l':
           ch = in_nonblank ();
           if (ISDIGIT (ch) && posixicity != POSIXLY_BASIC)
@@ -1412,7 +1408,7 @@ convert:
           case ':':
           case '.':
           case '=':
-            if (bracket_state == -1 && p[-1] == '[')
+            if (bracket_state == -1 && q[-1] == '[')
               bracket_state = *p;
             break;
 
@@ -1421,7 +1417,7 @@ convert:
               ;
             else if (bracket_state == -1)
               bracket_state = 0;
-            else if (p[-2] != bracket_state && p[-1] == bracket_state)
+            else if (q[-2] != bracket_state && q[-1] == bracket_state)
               bracket_state = -1;
             break;
           }

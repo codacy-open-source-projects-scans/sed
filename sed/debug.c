@@ -276,7 +276,8 @@ debug_print_function (const struct vector *program, const struct sed_cmd *sc)
       break;
 
     case ':':
-      printf ("%s", sc->x.label_name);
+      if (sc->x.label_name)
+        printf ("%s", sc->x.label_name);
       break;
 
     case '{':

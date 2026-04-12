@@ -294,3 +294,4 @@
 /streq-opt.h
 /streq.c
 /strnul.c
+/stdcountof.h

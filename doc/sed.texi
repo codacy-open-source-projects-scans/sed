@@ -2652,9 +2652,12 @@ A single ordinary character matches itself.
 Matches a sequence of zero or more instances of matches for the
 preceding regular expression, which must be an ordinary character, a
 special character preceded by @code{\}, a @code{.}, a grouped regexp
-(see below), or a bracket expression.  As a GNU extension, a
-postfixed regular expression can also be followed by @code{*}; for
-example, @code{a**} is equivalent to @code{a*}.  POSIX
+(see below), or a bracket expression.  As a GNU extension (disabled by
+@option{--posix}), a postfixed regular expression can also be followed
+by @code{*}; for example, @code{a**} is equivalent to @code{a*}.
+In extended regular expression mode (@option{-E}), @code{**} is also
+accepted, but that is not considered a GNU extension (POSIX leaves it
+undefined), so @option{--posix} does not affect it.  POSIX
 1003.1-2001 says that @code{*} stands for itself when it appears at
 the start of a regular expression or subexpression, but many
 non-GNU implementations do not support this and portable

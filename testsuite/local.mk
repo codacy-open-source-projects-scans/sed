@@ -43,6 +43,8 @@ LOG_COMPILER = false
 
 T =					\
   testsuite/misc.pl			\
+  testsuite/bre-star-star.sh		\
+  testsuite/debug-label.sh		\
   testsuite/bug80573.sh			\
   testsuite/bug32082.sh			\
   testsuite/bug32271-1.sh		\
@@ -74,6 +76,7 @@ T =					\
   testsuite/obinary.sh			\
   testsuite/panic-tests.sh		\
   testsuite/posix-backslash-warn.sh	\
+  testsuite/posix-bracket-esc.sh	\
   testsuite/posix-char-class.sh		\
   testsuite/posix-mode-addr.sh		\
   testsuite/posix-mode-bad-ref.sh	\
