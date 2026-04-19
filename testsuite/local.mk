@@ -43,6 +43,7 @@ LOG_COMPILER = false
 
 T =					\
   testsuite/misc.pl			\
+  testsuite/backref-anchor.sh		\
   testsuite/bre-star-star.sh		\
   testsuite/debug-label.sh		\
   testsuite/bug80573.sh			\

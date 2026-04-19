@@ -238,7 +238,6 @@ if test "$gl_gcc_warnings" = yes; then
   nw="$nw -Wdeclaration-after-statement" # too useful to forbid
   nw="$nw -Wsystem-headers"         # Don't let system headers trigger warnings
   nw="$nw -Wsign-conversion"        # Too many warnings for now
-  nw="$nw -Wformat-nonliteral"      # who.c and pinky.c strftime uses
   nw="$nw -Wswitch-default"         # Too many warnings for now
 
   gl_MANYWARN_ALL_GCC([ws])
@@ -247,6 +246,7 @@ if test "$gl_gcc_warnings" = yes; then
     gl_WARN_ADD([$w])
   done
   gl_WARN_ADD([-Wno-sign-compare])     # Too many warnings for now
+  gl_WARN_ADD([-Wno-format-nonliteral]) # ngettext in ck_fwrite
 
   # clang is unduly picky about some things.
   AC_CACHE_CHECK([whether the compiler is clang], [utils_cv_clang],

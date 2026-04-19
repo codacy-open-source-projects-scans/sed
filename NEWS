@@ -4,6 +4,13 @@ GNU sed NEWS                                    -*- outline -*-
 
 ** Bug fixes
 
+  sed no longer falsely matches when back-references are combined with
+  optional groups (.?) and the $ anchor.  For example, this no longer
+  falsely matches the empty string at beginning of line:
+    $ echo ab | sed -E 's/^(.?)(.?).?\2\1$/X/'
+    Xab
+  [bug present since "the beginning"]
+
   In --posix mode, sed no longer mishandles backslash escapes (\n,
   \t, \a, etc.) after a named character class like [[:alpha:]].
   For example, 's/^A\n[[:alpha:]]\n*/XXX/' would fail to match the
