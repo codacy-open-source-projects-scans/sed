@@ -27,12 +27,10 @@ mkdir a || framework_failure_
 touch a/a || framework_failure_
 chmod a-w a || framework_failure_
 
-# skip the test when running as root or when running in Cygwin
-# (because in these cases, the directory is still actually writable)
-test `id -u` != 0 || skip_ 'running as root'
-case `uname -s` in
-  CYGWIN*) skip_ 'running in cygwin' ;;
-esac
+# Skip if the directory is still writable, in spite of chmod a-w,
+# as happens with root, Cygwin (where owner trumps a-w) and ACLs
+# and capabilities.
+touch a/t 2>/dev/null && skip_ 'directory is still writable'
 
 # Expected error message, with actual filename/errno trimmed
 cat <<\EOF >exp-err-temp || framework_failure_

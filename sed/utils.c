@@ -250,17 +250,11 @@ ck_fread (void *ptr, idx_t size, idx_t nmemb, FILE *stream)
 ssize_t
 ck_getdelim (char **text, size_t *buflen, char delim, FILE *stream)
 {
-  ssize_t result;
-  bool error;
+  if (ferror (stream))
+    panic (_("read error on %s"), utils_fp_name (stream));
 
-  error = ferror (stream);
-  if (!error)
-    {
-      result = getdelim (text, buflen, delim, stream);
-      error = ferror (stream);
-    }
-
-  if (error)
+  ssize_t result = getdelim (text, buflen, delim, stream);
+  if (ferror (stream)) /* implies result < 0, hence errno is set */
     panic (_("read error on %s: %s"), utils_fp_name (stream), strerror (errno));
 
   return result;
