@@ -85,6 +85,7 @@ T =					\
   testsuite/posix-mode-s.sh		\
   testsuite/posix-mode-N.sh		\
   testsuite/range-overlap.sh		\
+  testsuite/read-error-stale-errno.sh	\
   testsuite/recursive-escape-c.sh	\
   testsuite/regex-errors.sh		\
   testsuite/regex-max-int.sh		\

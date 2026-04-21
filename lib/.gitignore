@@ -295,3 +295,4 @@
 /streq.c
 /strnul.c
 /stdcountof.h
+/stdcountof.in.h

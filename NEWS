@@ -4,6 +4,16 @@ GNU sed NEWS                                    -*- outline -*-
 
 ** Bug fixes
 
+  sed 's/a/b/g' (and other global substitutions) now works on input
+  lines longer than 2GB. Previously, matches beyond the 2^31 byte offset
+  would evoke a "panic" (exit 4).
+  [bug present since the beginning]
+
+  'sed --follow-symlinks -i' no longer has a TOCTOU race that could let
+  an attacker swap a symlink between resolution and open, causing sed to
+  read attacker-chosen content and write it to the original target.
+  [bug introduced in sed 4.1e]
+
   sed no longer falsely matches when back-references are combined with
   optional groups (.?) and the $ anchor.  For example, this no longer
   falsely matches the empty string at beginning of line:

@@ -33,16 +33,13 @@ printf aaaa >>  input || framework_failure_
 truncate -s +1G input || framework_failure_
 printf 'a\n' >> input || framework_failure_
 
-# The expected error message
-cat <<\EOF > exp-err1 || framework_failure_
-sed: regex input buffer length larger than INT_MAX
-EOF
-
+echo bbbbb > exp-out || framework_failure_
 
 # Before sed-4.5, this was silently a no-op: would not perform the substitution
 # but would not indicate any error either (https://bugs.gnu.org/30520).
-# Exit code 4 is "panic".
-returns_ 4 sed 's/a/b/g' input >/dev/null 2>err1 || fail=1
-compare_ exp-err1 err1 || fail=1
+# With sed-4.9, it would result in bbbba, failing to transform the final "a",
+# because sed/regex.c used "int" (causing wrap-to-negative malfunction).
+sed s/a/b/g input 2>err1 | tr -d '\0' > out || fail=1
+compare_ exp-out out || fail=1
 
 Exit $fail

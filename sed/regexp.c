@@ -163,7 +163,7 @@ match_regex (struct regex *regex, char *buf, idx_t buflen,
             idx_t buf_start_offset, struct re_registers *regarray,
             int regsize)
 {
-  int ret;
+  regoff_t ret;
   static struct regex *regex_last;
 
   /* Keep track of the last regexp matched. */

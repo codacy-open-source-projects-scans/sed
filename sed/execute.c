@@ -562,7 +562,7 @@ open_next_file (const char *name, struct input *input)
       if (follow_symlinks)
         input->in_file_name = follow_symlink (name);
 
-      if ( ! (input->fp = ck_fopen (name, read_mode, false)) )
+      if ( ! (input->fp = ck_fopen (input->in_file_name, read_mode, false)) )
         {
           const char *ptr = strerror (errno);
           fprintf (stderr, _("%s: can't read %s: %s\n"), program_name,
@@ -1036,8 +1036,8 @@ do_subst (struct subst *sub)
           if (regs.start[i] == -1)
             break;
 
-          printf ("  regex[%d] = %d-%d '", i,
-                  (int)regs.start[i], (int)regs.end[i]);
+          printf ("  regex[%d] = %td-%td '", i,
+                  (ptrdiff_t)regs.start[i], (ptrdiff_t)regs.end[i]);
 
           if (regs.start[i] != regs.end[i])
             fwrite (line.active + regs.start[i], regs.end[i] -regs.start[i],
