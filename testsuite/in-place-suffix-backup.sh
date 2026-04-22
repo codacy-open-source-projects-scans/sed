@@ -52,6 +52,7 @@ test -e d=d || fail=1
 # TODO: improve error message;
 #       document why exit code is 4.
 returns_ 4 sed -i'***' = ./e 2>err-rename || fail=1
+remove_selinux_warning_ err-rename
 compare_ exp-err-rename err-rename || fail=1
 
 # backup filename resolving to the same as the input filename,

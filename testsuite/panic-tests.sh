@@ -40,6 +40,7 @@ EOF
 # TODO: why exit-code 4 (currently hard-coded)
 returns_ 4 sed -i = a/a 2>err-temp || fail=1
 
+remove_selinux_warning_ err-temp
 # trim the filename/errno message (using sed itself...)
 sed -i 's/file.*$/file/' err-temp || framework_failure_
 compare_ exp-err-temp err-temp || fail=1

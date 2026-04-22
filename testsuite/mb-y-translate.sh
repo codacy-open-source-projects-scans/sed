@@ -49,11 +49,14 @@ LC_ALL=en_US.UTF-8 sed -f p1 <in1 >out1 || fail=1
 compare_ exp1 out1 || fail=1
 
 # in C locale, report error of mismatched length
-cat <<\EOF > exp-err1 || framework_failure_
+# Skip if C locale is multibyte (e.g., Android bionic defaults to UTF-8).
+if test "$(LC_ALL=C get-mb-cur-max C)" = 1; then
+  cat <<\EOF > exp-err1 || framework_failure_
 sed: file p1 line 1: 'y' command strings have different lengths
 EOF
-returns_ 1 env LC_ALL=C sed -f p1 </dev/null 2>err1 || fail=1
-compare_ exp-err1 err1 || fail=1
+  returns_ 1 env LC_ALL=C sed -f p1 </dev/null 2>err1 || fail=1
+  compare_ exp-err1 err1 || fail=1
+fi
 
 
 #
@@ -67,11 +70,14 @@ LC_ALL=en_US.UTF-8 sed -f p2 <in2 >out2 || fail=1
 compare_ exp2 out2 || fail=1
 
 # in C locale, report error of mismatched length
-cat <<\EOF > exp-err2 || framework_failure_
+# Skip if C locale is multibyte (e.g., Android bionic defaults to UTF-8).
+if test "$(LC_ALL=C get-mb-cur-max C)" = 1; then
+  cat <<\EOF > exp-err2 || framework_failure_
 sed: file p2 line 1: 'y' command strings have different lengths
 EOF
-returns_ 1 env LC_ALL=C sed -f p2 </dev/null 2>err2 || fail=1
-compare_ exp-err2 err2 || fail=1
+  returns_ 1 env LC_ALL=C sed -f p2 </dev/null 2>err2 || fail=1
+  compare_ exp-err2 err2 || fail=1
+fi
 
 
 #

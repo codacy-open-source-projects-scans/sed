@@ -63,7 +63,7 @@ GNU sed NEWS                                    -*- outline -*-
 
 ** Build-related
 
-  builds no longer fail on platforms without the <getoph.h> header or
+  builds no longer fail on platforms without the <getopt.h> header or
   getopt_long function.
   [bug introduced in sed 4.9]
 

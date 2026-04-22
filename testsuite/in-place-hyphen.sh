@@ -24,6 +24,7 @@ echo aXc > exp-out || framework_failure_
 sed -i 's/b/X/' - > out 2> err || fail=1
 
 compare exp-out ./- || fail=1
+remove_selinux_warning_ err
 compare /dev/null err || fail=1
 
 Exit $fail

@@ -19,6 +19,19 @@
 . "${srcdir=.}/testsuite/init.sh"; path_prepend_ ./sed
 print_ver_ sed
 
+# Verify that non-blocking read from a FIFO with no data (but a writer
+# still attached) fails with EAGAIN rather than returning 0 (EOF).
+# Cygwin's FIFO implementation gets this wrong, violating POSIX.
+mkfifo probe || framework_failure_
+{ exec sleep 99; } > probe &
+probe_pid=$!
+(exec < probe; dd iflag=nonblock bs=1 count=1 2>/dev/null)
+probe_rc=$?
+kill $probe_pid 2>/dev/null; wait
+rm -f probe
+test $probe_rc = 0 \
+  && skip_ "FIFO+O_NONBLOCK returns EOF, not EAGAIN"
+
 # Use a FIFO with non-blocking I/O.  After sed reads one line,
 # the next read(2) fails with EAGAIN (not EOF, since a writer is
 # still attached), setting ferror on the stream.

@@ -608,7 +608,7 @@ open_next_file (const char *name, struct input *input)
               reset_fscreatecon = getfscreatecon (&old_fscreatecon) >= 0;
               if (setfscreatecon (con) < 0)
                 fprintf (stderr, _("%s: warning: failed to set default" \
-                                   " file creation context to %s: %s"),
+                                   " file creation context to %s: %s\n"),
                          program_name, con, strerror (errno));
               freecon (con);
             }
@@ -616,7 +616,7 @@ open_next_file (const char *name, struct input *input)
             {
               if (errno != ENOSYS)
                 fprintf (stderr, _("%s: warning: failed to get" \
-                                   " security context of %s: %s"),
+                                   " security context of %s: %s\n"),
                          program_name, input->in_file_name, strerror (errno));
             }
         }

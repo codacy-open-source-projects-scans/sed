@@ -58,10 +58,13 @@ returns_ 1 env LC_ALL=en_US.UTF-8 sed -f prog2 </dev/null 2>err2 || fail=1
 compare_ exp-err2 err2 || fail=1
 
 # ... but accept octet \316 as delimiter in C locale
-echo a > in2 || framework_failure_
-echo b > exp2 || framework_failure_
-LC_ALL=C sed -f prog2 <in2 >out2 || fail=1
-compare_ exp2 out2 || fail=1
+# Skip if C locale is multibyte (e.g., Android bionic defaults to UTF-8).
+if test "$(LC_ALL=C get-mb-cur-max C)" = 1; then
+  echo a > in2 || framework_failure_
+  echo b > exp2 || framework_failure_
+  LC_ALL=C sed -f prog2 <in2 >out2 || fail=1
+  compare_ exp2 out2 || fail=1
+fi
 
 
 

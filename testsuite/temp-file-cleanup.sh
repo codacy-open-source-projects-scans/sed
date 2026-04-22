@@ -28,6 +28,7 @@ printf 'sed: -e expression #1, char 0: no previous regular expression\n' \
 returns_ 1 sed -i s//b/ in > out 2> err || fail=1
 
 compare /dev/null out || fail=1
+remove_selinux_warning_ err
 compare exp err || fail=1
 
 # Ensure that no other file has been created in this directory.
