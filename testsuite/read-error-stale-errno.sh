@@ -19,18 +19,26 @@
 . "${srcdir=.}/testsuite/init.sh"; path_prepend_ ./sed
 print_ver_ sed
 
-# Verify that non-blocking read from a FIFO with no data (but a writer
-# still attached) fails with EAGAIN rather than returning 0 (EOF).
-# Cygwin's FIFO implementation gets this wrong, violating POSIX.
+# Verify that O_NONBLOCK is preserved across program invocations.
+# In particular, verify that when a 'dd' child process sets O_NONBLOCK
+# on stdin, this flag is then active in the parent process and in all
+# its future child processes.
+# This is not the case on Cygwin, because the major part of the
+# O_NONBLOCK state is stored in an 'fhandler_base' object, not in the
+# Windows HANDLE.
 mkfifo probe || framework_failure_
-{ exec sleep 99; } > probe &
+{ exec sleep 1; } > probe &
 probe_pid=$!
-(exec < probe; dd iflag=nonblock bs=1 count=1 2>/dev/null)
+(
+  exec < probe
+  dd iflag=nonblock count=0 2>/dev/null
+  dd bs=1 count=1 2>/dev/null
+)
 probe_rc=$?
 kill $probe_pid 2>/dev/null; wait
 rm -f probe
 test $probe_rc = 0 \
-  && skip_ "FIFO+O_NONBLOCK returns EOF, not EAGAIN"
+  && skip_ "O_NONBLOCK is not preserved across program invocations"
 
 # Use a FIFO with non-blocking I/O.  After sed reads one line,
 # the next read(2) fails with EAGAIN (not EOF, since a writer is
