@@ -125,11 +125,16 @@ T += testsuite/8bit.sh			\
 
 TESTS = $(SEDTESTS) $(T)
 
+XFAIL_TESTS =
+if OS_IS_FREEBSD
+# There is a longstanding bug in FreeBSD's EUC decoder,
+XFAIL_TESTS += testsuite/invalid-mb-seq-UMR.sh
+endif
+
 SEDTESTS =
 
-check_PROGRAMS = testsuite/get-mb-cur-max testsuite/test-mbrtowc
+check_PROGRAMS = testsuite/get-mb-cur-max
 testsuite_get_mb_cur_max_LDADD = lib/libsed.a $(INTLLIBS)
-testsuite_test_mbrtowc_LDADD = lib/libsed.a $(INTLLIBS)
 
 # Note that the first lines are statements.  They ensure that environment
 # variables that can perturb tests are unset or set to expected values.

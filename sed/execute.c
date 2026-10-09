@@ -19,25 +19,20 @@
 
 #include "sed.h"
 
+#include <acl.h>
+#include <ignore-value.h>
+#include <minmax.h>
+#include <progname.h>
+#include <xalloc.h>
+
+#include <errno.h>
+#include <selinux/selinux.h>
 #include <stdckdint.h>
 #include <stddef.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
 #include <stdlib.h>
-#include <sys/types.h>
+#include <string.h>
 #include <sys/stat.h>
-#include "stat-macros.h"
-
-#include <selinux/selinux.h>
-#include <selinux/context.h>
-#include "acl.h"
-#include "ignore-value.h"
-#include "minmax.h"
-#include "progname.h"
-#include "xalloc.h"
+#include <unistd.h>
 
 /* The number of extra bytes that must be allocated/usable, beyond
    the declared "end" of each line buffer that may be passed to
@@ -53,10 +48,7 @@ struct line {
                         /* 0 <= LENGTH <= ALLOC, and the malloc
                            size is ACTIVE - TEXT + ALLOC + DFA_SLOP.  */
   bool chomped;		/* Was a trailing newline dropped? */
-  mbstate_t mbstate;
 };
-
-#define SIZEOF_LINE	offsetof (struct line, mbstate)
 
 /* A queue of text to write out at the end of a cycle
    (filled by the "a", "r" and "R" commands.) */
@@ -164,157 +156,101 @@ str_append (struct line *to, const char *string, idx_t length)
   idx_t new_length = to->length + length;
   memcpy (to->active + to->length, string, length);
   to->length = new_length;
-
-  if (mb_cur_max > 1 && !is_utf8)
-    while (length)
-      {
-        size_t n = MBRLEN (string, length, &to->mbstate);
-
-        /* Treat an invalid or incomplete sequence like a
-           single-byte character.  */
-        if (n == (size_t) -1 || n == (size_t) -2)
-          {
-            memset (&to->mbstate, 0, sizeof (to->mbstate));
-            n = 1;
-          }
-
-        if (n == 0)
-          break;
-
-        string += n;
-        length -= n;
-      }
 }
 
 static void
 str_append_modified (struct line *to, const char *string, idx_t length,
                      enum replacement_types type)
 {
-  mbstate_t from_stat;
-
   if (type == REPL_ASIS)
     {
       str_append (to, string, length);
       return;
     }
 
-  if (to->alloc - to->length < length * mb_cur_max)
-    resize_line (to, length * mb_cur_max);
+  idx_t worst_case_growth;
+  if (ckd_mul (&worst_case_growth, length, MCEL_LEN_MAX))
+    xalloc_die ();
+  if (to->alloc - to->length < worst_case_growth)
+    resize_line (to, worst_case_growth);
 
-  memcpy (&from_stat, &to->mbstate, sizeof (mbstate_t));
-  while (length)
+  char const *stringlim = string + length;
+  while (string < stringlim)
     {
-      wchar_t wc;
-      size_t n = MBRTOWC (&wc, string, length, &from_stat);
+      mcel_t g = mcel_scan (string, stringlim);
 
       /* Treat an invalid sequence like a single-byte character.  */
-      if (n == (size_t) -1)
+      if (g.err)
         {
           type &= ~(REPL_LOWERCASE_FIRST | REPL_UPPERCASE_FIRST);
           if (type == REPL_ASIS)
             {
-              str_append (to, string, length);
+              str_append (to, string, stringlim - string);
               return;
             }
 
           str_append (to, string, 1);
-          memset (&to->mbstate, 0, sizeof (from_stat));
-          n = 1;
-          string += n, length -= n;
+          string++;
           continue;
         }
 
-      if (n == 0 || n == (size_t) -2)
-        {
-          /* L'\0' or an incomplete sequence: copy it manually.  */
-          str_append (to, string, length);
-          return;
-        }
-
-      string += n, length -= n;
+      string += g.len;
 
       /* Convert the first character specially... */
       if (type & (REPL_UPPERCASE_FIRST | REPL_LOWERCASE_FIRST))
         {
           if (type & REPL_UPPERCASE_FIRST)
-            wc = towupper (wc);
+            g.ch = c32toupper (g.ch);
           else
-            wc = towlower (wc);
+            g.ch = c32tolower (g.ch);
 
           type &= ~(REPL_LOWERCASE_FIRST | REPL_UPPERCASE_FIRST);
           if (type == REPL_ASIS)
             {
-              /* Copy the new wide character to the end of the string. */
-              n = WCRTOMB (to->active + to->length, wc, &to->mbstate);
-              if (n == (size_t) -1 || n == (size_t) -2)
-                {
-                  fprintf (stderr,
-                           _("case conversion produced an invalid character"));
-                  abort ();
-                }
-              to->length += n;
-              str_append (to, string, length);
+              /* Copy the new character to the end of the string.  */
+              to->length += c32rtomb1 (to->active + to->length, g.ch);
+              str_append (to, string, stringlim - string);
               return;
             }
         }
       else if (type & REPL_UPPERCASE)
-        wc = towupper (wc);
+        g.ch = c32toupper (g.ch);
       else
-        wc = towlower (wc);
+        g.ch = c32tolower (g.ch);
 
-      /* Copy the new wide character to the end of the string. */
-      n = WCRTOMB (to->active + to->length, wc, &to->mbstate);
-      if (n == -1 || n == -2)
-        {
-          fprintf (stderr, _("case conversion produced an invalid character"));
-          abort ();
-        }
-      to->length += n;
+      /* Copy the new character to the end of the string.  */
+      to->length += c32rtomb1 (to->active + to->length, g.ch);
     }
 }
 
-/* Initialize a "struct line" buffer.  Copy multibyte state from 'state'
-   if not null.  */
+/* Initialize a "struct line" buffer.  */
 static void
-line_init (struct line *buf, struct line *state, idx_t initial_size)
+line_init (struct line *buf, idx_t initial_size)
 {
   buf->text = XNMALLOC (initial_size + DFA_SLOP, char);
   buf->active = buf->text;
   buf->alloc = initial_size;
   buf->length = 0;
   buf->chomped = true;
-
-  if (state)
-    memcpy (&buf->mbstate, &state->mbstate, sizeof (buf->mbstate));
-  else
-    memset (&buf->mbstate, 0, sizeof (buf->mbstate));
 }
 
-/* Reset a "struct line" buffer to length zero.  Copy multibyte state from
-   'state' if not null.  */
+/* Reset a "struct line" buffer to length zero.  */
 static void
-line_reset (struct line *buf, struct line *state)
+line_reset (struct line *buf)
 {
   if (buf->alloc == 0)
     {
       free (buf->text);
-      line_init (buf, state, INITIAL_BUFFER_SIZE);
+      line_init (buf, INITIAL_BUFFER_SIZE);
     }
   else
-    {
-      buf->length = 0;
-      if (state)
-        memcpy (&buf->mbstate, &state->mbstate, sizeof (buf->mbstate));
-      else
-        memset (&buf->mbstate, 0, sizeof (buf->mbstate));
-    }
+    buf->length = 0;
 }
 
 /* Copy the contents of the line 'from' into the line 'to'.
-   This destroys the old contents of 'to'.
-   Copy the multibyte state if 'state' is true. */
+   This destroys the old contents of 'to'.  */
 static void
-line_copy (struct line *from, struct line *to, int state)
+line_copy (struct line *from, struct line *to)
 {
   /* Remove the inactive portion in the destination buffer. */
   to->alloc += to->active - to->text;
@@ -333,43 +269,23 @@ line_copy (struct line *from, struct line *to, int state)
   to->length = from->length;
   to->chomped = from->chomped;
   memcpy (to->active, from->active, from->length);
-
-  if (state)
-    memcpy (&to->mbstate, &from->mbstate, sizeof (from->mbstate));
 }
 
-/* Append the contents of the line 'from' to the line 'to'.
-   Copy the multibyte state if 'state' is true. */
+/* Append the contents of the line 'from' to the line 'to'.  */
 static void
-line_append (struct line *from, struct line *to, int state)
+line_append (struct line *from, struct line *to)
 {
   str_append (to, &buffer_delimiter, 1);
   str_append (to, from->active, from->length);
   to->chomped = from->chomped;
-
-  if (state)
-    memcpy (&to->mbstate, &from->mbstate, sizeof (from->mbstate));
 }
 
-/* Exchange two "struct line" buffers.
-   Copy the multibyte state if 'state' is true. */
 static void
-line_exchange (struct line *a, struct line *b, int state)
+line_exchange (struct line *a, struct line *b)
 {
-  struct line t;
-
-  if (state)
-    {
-      memcpy (&t,  a, sizeof (struct line));
-      memcpy ( a,  b, sizeof (struct line));
-      memcpy ( b, &t, sizeof (struct line));
-    }
-  else
-    {
-      memcpy (&t,  a, SIZEOF_LINE);
-      memcpy ( a,  b, SIZEOF_LINE);
-      memcpy ( b, &t, SIZEOF_LINE);
-    }
+  struct line t = *a;
+  *a = *b;
+  *b = t;
 }
 
 /* dummy function to simplify read_pattern_space() */
@@ -518,7 +434,7 @@ get_backup_file_name (const char *name)
        (asterisk = strchr (old_asterisk, '*'));
        old_asterisk = asterisk + 1)
     asterisks++;
-  ptrdiff_t name_length = strlen (name), backup_size;
+  idx_t name_length = strlen (name), backup_size;
   if (ckd_mul (&backup_size, asterisks, name_length - 1)
       || ckd_add (&backup_size, backup_size, strlen (in_place_extension) + 1))
     xalloc_die ();
@@ -550,8 +466,7 @@ open_next_file (const char *name, struct input *input)
   if (name[0] == '-' && name[1] == '\0' && !in_place_extension)
     {
       clearerr (stdin);	/* clear any stale EOF indication */
-#if defined WIN32 || defined _WIN32 || defined __CYGWIN__ \
-  || defined MSDOS || defined __EMX__
+#if defined WIN32 || defined _WIN32 || defined __CYGWIN__ || defined MSDOS
       input->fp = ck_fdopen (fileno (stdin), "stdin", read_mode, false);
 #else
       input->fp = stdin;
@@ -566,7 +481,7 @@ open_next_file (const char *name, struct input *input)
         {
           const char *ptr = strerror (errno);
           fprintf (stderr, _("%s: can't read %s: %s\n"), program_name,
-                   name, ptr);
+                   quotef (name), ptr);
           input->read_fn = read_always_fail; /* a redundancy */
           ++input->bad_count;
           return;
@@ -579,9 +494,8 @@ open_next_file (const char *name, struct input *input)
     {
       int input_fd;
       char *tmpdir, *p;
-      char *old_fscreatecon;
+      char *old_fscreatecon = NULL;
       int reset_fscreatecon = 0;
-      memset (&old_fscreatecon, 0, sizeof (old_fscreatecon));
 
       /* get the base name */
       tmpdir = xstrdup (input->in_file_name);
@@ -591,12 +505,14 @@ open_next_file (const char *name, struct input *input)
         strcpy (tmpdir, ".");
 
       if (isatty (fileno (input->fp)))
-        panic (_("couldn't edit %s: is a terminal"), input->in_file_name);
+        panic (_("couldn't edit %s: is a terminal"),
+               quotef (input->in_file_name));
 
       input_fd = fileno (input->fp);
       fstat (input_fd, &input->st);
       if (!S_ISREG (input->st.st_mode))
-        panic (_("couldn't edit %s: not a regular file"), input->in_file_name);
+        panic (_("couldn't edit %s: not a regular file"),
+               quotef (input->in_file_name));
 
       if (is_selinux_enabled () > 0)
         {
@@ -609,7 +525,7 @@ open_next_file (const char *name, struct input *input)
               if (setfscreatecon (con) < 0)
                 fprintf (stderr, _("%s: warning: failed to set default" \
                                    " file creation context to %s: %s\n"),
-                         program_name, con, strerror (errno));
+                         program_name, quotef (con), strerror (errno));
               freecon (con);
             }
           else
@@ -617,7 +533,8 @@ open_next_file (const char *name, struct input *input)
               if (errno != ENOSYS)
                 fprintf (stderr, _("%s: warning: failed to get" \
                                    " security context of %s: %s\n"),
-                         program_name, input->in_file_name, strerror (errno));
+                         program_name, quotef (input->in_file_name),
+                         strerror (errno));
             }
         }
 
@@ -633,8 +550,8 @@ open_next_file (const char *name, struct input *input)
         }
 
       if (!output_file.fp)
-        panic (_("couldn't open temporary file %s: %s"), input->out_file_name,
-               strerror (errno));
+        panic (_("couldn't open temporary file %s: %s"),
+               quotef (input->out_file_name), strerror (errno));
     }
   else
     {
@@ -673,7 +590,7 @@ closedown (struct input *input)
 
       ck_fclose (input->fp);
       ck_fclose (output_file.fp);
-      if (strcmp (in_place_extension, "*") != 0)
+      if (!streq (in_place_extension, "*"))
         {
           char *backup_file_name = get_backup_file_name (target_name);
           ck_rename (target_name, backup_file_name);
@@ -695,9 +612,9 @@ static void
 reset_addresses (struct vector *vec)
 {
   struct sed_cmd *cur_cmd;
-  int n;
+  idx_t n;
 
-  for (cur_cmd = vec->v, n = vec->v_length; n--; cur_cmd++)
+  for (cur_cmd = vec->v, n = vec->v_length; n != 0; cur_cmd++, n--)
     if (cur_cmd->a1
         && cur_cmd->a1->addr_type == ADDR_IS_NUM
         && cur_cmd->a1->addr_number == 0)
@@ -884,7 +801,7 @@ match_address_p (struct sed_cmd *cmd, struct input *input)
                         - (input->line_number % cmd->a2->addr_step))))
             cmd->a2->addr_number = INTMAX_MAX;
           return true;
-        default:
+        case ADDR_IS_LAST: case ADDR_IS_NUM_MOD: case ADDR_IS_NULL:
           break;
         }
     }
@@ -914,30 +831,25 @@ match_address_p (struct sed_cmd *cmd, struct input *input)
 static void
 do_list (intmax_t line_len)
 {
-  unsigned char *p = (unsigned char *)line.active;
-  idx_t len = line.length;
   idx_t width = 0;
   FILE *fp = output_file.fp;
 
   output_missing_newline (&output_file);
-  for (; len--; ++p) {
-      char obuf[sizeof "\\377" - 1];
-      char *o = obuf;
 
-      /* Some locales define 8-bit characters as printable.  This makes the
-         testsuite fail at 8to7.sed because the 'l' command in fact will not
-         convert the 8-bit characters. */
-#if defined isascii || defined HAVE_ISASCII
-      if (isascii (*p) && ISPRINT (*p)) {
-#else
-      if (ISPRINT (*p)) {
-#endif
-          *o++ = *p;
-          if (*p == '\\')
-            *o++ = '\\';
-      } else {
-          *o++ = '\\';
-          switch (*p) {
+  mcel_t g;
+  char *plim = line.active + line.length;
+  for (char *p = line.active; p < plim; p += g.len)
+    {
+      g = mcel_scan (p, plim);
+      char obuf[(sizeof "\\377" - 1) * MCEL_LEN_MAX];
+      char *o = obuf;
+      *o = '\\';
+      if (c32isprint (g.ch))
+        o = mempcpy (o + (g.ch == '\\'), p, g.len);
+      else
+        {
+          o++;
+          switch (g.ch) {
             case '\a': *o++ = 'a'; break;
             case '\b': *o++ = 'b'; break;
             case '\f': *o++ = 'f'; break;
@@ -946,12 +858,18 @@ do_list (intmax_t line_len)
             case '\t': *o++ = 't'; break;
             case '\v': *o++ = 'v'; break;
             default:
-              *o++ = '0' + ((*p & 0300) >> 6);
-              *o++ = '0' + ((*p & 0070) >> 3);
-              *o++ = '0' + ((*p & 0007) >> 0);
+              for (idx_t i = 0; i < g.len; i++)
+                {
+                  *o = '\\';
+                  o += !!i;
+                  *o++ = '0' + ((p[i] & 0300) >> 6);
+                  *o++ = '0' + ((p[i] & 0070) >> 3);
+                  *o++ = '0' + ((p[i] & 0007) >> 0);
+                }
               break;
             }
-      }
+        }
+
       idx_t olen = o - obuf;
       if (0 < line_len && line_len - olen <= width) {
           ck_fwrite ("\\", 1, 1, fp);
@@ -960,7 +878,7 @@ do_list (intmax_t line_len)
       }
       ck_fwrite (obuf, 1, olen, fp);
       width += olen;
-  }
+    }
   ck_fwrite ("$", 1, 1, fp);
   ck_fwrite (&buffer_delimiter, 1, 1, fp);
   flush_output (fp);
@@ -1018,7 +936,7 @@ do_subst (struct subst *sub)
 
   static struct re_registers regs;
 
-  line_reset (&s_accum, &line);
+  line_reset (&s_accum);
 
   /* The first part of the loop optimizes s/xxx// when xxx is at the
      start, and s/xxx$// */
@@ -1037,7 +955,7 @@ do_subst (struct subst *sub)
             break;
 
           printf ("  regex[%d] = %td-%td '", i,
-                  (ptrdiff_t)regs.start[i], (ptrdiff_t)regs.end[i]);
+                  (ptrdiff_t) {regs.start[i]}, (ptrdiff_t) {regs.end[i]});
 
           if (regs.start[i] != regs.end[i])
             fwrite (line.active + regs.start[i], regs.end[i] -regs.start[i],
@@ -1132,9 +1050,7 @@ do_subst (struct subst *sub)
     str_append (&s_accum, line.active + start, line.length-start);
   s_accum.chomped = line.chomped;
 
-  /* Exchange line and s_accum.  This can be much cheaper
-     than copying s_accum.active into line.text (for huge lines). */
-  line_exchange (&line, &s_accum, false);
+  line_exchange (&line, &s_accum);
 
   /* Finish up. */
   if (count < sub->numb)
@@ -1148,7 +1064,7 @@ do_subst (struct subst *sub)
     {
 #ifdef HAVE_POPEN
       FILE *pipe_fp;
-      line_reset (&s_accum, NULL);
+      line_reset (&s_accum);
 
       str_append (&line, "", 1);
       pipe_fp = popen (line.active, "r");
@@ -1165,10 +1081,7 @@ do_subst (struct subst *sub)
 
           pclose (pipe_fp);
 
-          /* Exchange line and s_accum.  This can be much cheaper than copying
-             s_accum.active into line.text (for huge lines).  See comment above
-             for 'g' as to while the third argument is incorrect anyway.  */
-          line_exchange (&line, &s_accum, true);
+          line_exchange (&line, &s_accum);
           if (line.length
               && line.active[line.length - 1] == buffer_delimiter)
             line.length--;
@@ -1189,60 +1102,68 @@ do_subst (struct subst *sub)
 /* Translate the global input LINE via TRANS.
    This function handles the multi-byte case.  */
 static void
-translate_mb (char *const *trans)
+translate_mb (idx_t npairs, struct trans_pair *pair)
 {
-  idx_t idx; /* index in the input line.  */
-  mbstate_t mbstate = { 0, };
-  for (idx = 0; idx < line.length;)
+  char *from = line.active;
+  char *fromlim = line.active + line.length;
+  char *to = line.text;
+
+  /* Shrink any inactive area to zero size, as we are about to write it
+     and we don't want resize_line to lose what we wrote.  */
+  idx_t inactive = line.active - line.text;
+  line.active = line.text;
+  line.length += inactive;
+  line.alloc += inactive;
+
+  mcel_t g;
+  for (; from < fromlim; from += g.len)
     {
-      idx_t i;
-      size_t mbclen = MBRLEN (line.active + idx,
-                              line.length - idx, &mbstate);
-      /* An invalid sequence, or a truncated multibyte
-         character.  Treat it as a single-byte character.  */
-      if (mbclen == (size_t) -1 || mbclen == (size_t) -2 || mbclen == 0)
-        mbclen = 1;
+      g = mcel_scan (from, fromlim);
+      int ch = g.err ? -g.err : g.ch;
+      char *tr = from;
+      idx_t trlen = g.len;
 
-      /* 'i' indicate i-th translate pair.  */
-      for (i = 0; trans[2*i] != NULL; i++)
+      for (idx_t i = 0; i < npairs; i++)
         {
-          if (STREQ_LEN (line.active + idx, trans[2*i], mbclen))
+          if (pair[i].from == ch)
             {
-              bool move_remain_buffer = false;
-              const char *tr = trans[2*i+1];
-              idx_t trans_len = *tr == '\0' ? 1 : strlen (tr);
+              tr = pair[i].to;
+              trlen = 1 + strnlen (tr + 1, sizeof pair[i].to - 1);
+              idx_t growth = trlen - g.len;
+              idx_t avail1 = from - to;
+              ptrdiff_t shortage = growth - avail1;
 
-              if (mbclen < trans_len)
+              if (0 < shortage)
                 {
-                  idx_t len = trans_len + 1 - mbclen;
-                  if (line.alloc - line.length < len)
-                    resize_line (&line, len);
-                  move_remain_buffer = true;
+                  /* The destination's tail would step on source's head.
+                     Grow the buffer if necessary, then
+                     move the source to the end of the buffer.
+                     AVAIL1 is the size of the unused area from TO to FROM;
+                     AVAIL2 is the size of the unused area from FROMLIM
+                     to DFA slop at line buffer end.  */
+                  idx_t fromlen = fromlim - from;
+                  idx_t avail2 = line.active + line.alloc - fromlim;
+                  if (avail2 < shortage)
+                    {
+                      idx_t to_offset = to - line.text;
+                      idx_t from_offset = from - line.text;
+                      resize_line (&line, shortage);
+                      to = line.text + to_offset;
+                      from = line.text + from_offset;
+                    }
+                  from = memmove (line.active + line.alloc - fromlen,
+                                  from, fromlen);
+                  fromlim = from + fromlen;
                 }
-              else if (mbclen > trans_len)
-                {
-                  /* We must truncate the line buffer.  */
-                  move_remain_buffer = true;
-                }
-              idx_t prev_idx = idx;
-              if (move_remain_buffer)
-                {
-                  /* Move the remaining with \0.  */
-                  char const *move_from = (line.active + idx + mbclen);
-                  char *move_to = line.active + idx + trans_len;
-                  idx_t move_len = line.length + 1 - idx - mbclen;
-                  idx_t move_offset = trans_len - mbclen;
-                  memmove (move_to, move_from, move_len);
-                  line.length += move_offset;
-                  idx += move_offset;
-                }
-              memcpy (line.active + prev_idx, trans[2*i+1],
-                     trans_len);
               break;
             }
         }
-      idx += mbclen;
+
+      memmove (to, tr, trlen);
+      to += trlen;
     }
+
+  line.length = to - line.text;
 }
 
 static void
@@ -1264,13 +1185,14 @@ debug_print_input (const struct input *input)
 static void
 debug_print_line (struct line *ln)
 {
-  const char *src = ln->active;
-  idx_t l = ln->length;
-  const char *p = src;
-
   fputs ( (ln == &hold) ? "HOLD:    ":"PATTERN: ", stdout);
-  while (l--)
-    debug_print_char (*p++);
+  char const *plim = ln->active + ln->length;
+  mcel_t g;
+  for (char const *p = ln->active; p < plim; p += g.len)
+    {
+      g = mcel_scan (p, plim);
+      debug_print_char (g, p);
+    }
   putchar ('\n');
 }
 
@@ -1353,7 +1275,7 @@ execute_program (struct vector *vec, struct input *input)
 #else
               FILE *pipe_fp;
               idx_t cmd_length = cur_cmd->x.cmd_txt.text_length;
-              line_reset (&s_accum, NULL);
+              line_reset (&s_accum);
 
               if (!cmd_length)
                 {
@@ -1391,11 +1313,7 @@ execute_program (struct vector *vec, struct input *input)
                             == buffer_delimiter))
                       s_accum.length--;
 
-                    /* Exchange line and s_accum.  This can be much
-                       cheaper than copying s_accum.active into line.text
-                       (for huge lines).  See comment above for 'g' as
-                       to while the third argument is incorrect anyway.  */
-                    line_exchange (&line, &s_accum, true);
+                    line_exchange (&line, &s_accum);
                   }
                 else
                   flush_output (output_file.fp);
@@ -1405,39 +1323,25 @@ execute_program (struct vector *vec, struct input *input)
             }
 
             case 'g':
-              /* We do not have a really good choice for the third parameter.
-                 The problem is that hold space and the input file might as
-                 well have different states; copying it from hold space means
-                 that subsequent input might be read incorrectly, while
-                 keeping it as in pattern space means that commands operating
-                 on the moved buffer might consider a wrong character set.
-                 We keep it true because it's what sed <= 4.1.5 did.  */
-              line_copy (&hold, &line, true);
+              line_copy (&hold, &line);
               if (debug)
                 debug_print_line (&hold);
               break;
 
             case 'G':
-              /* We do not have a really good choice for the third parameter.
-                 The problem is that hold space and pattern space might as
-                 well have different states.  So, true is as wrong as false.
-                 We keep it true because it's what sed <= 4.1.5 did, but
-                 we could consider having line_ap.  */
-              line_append (&hold, &line, true);
+              line_append (&hold, &line);
               if (debug)
                 debug_print_line (&line);
               break;
 
             case 'h':
-              /* Here, it is ok to have true.  */
-              line_copy (&line, &hold, true);
+              line_copy (&line, &hold);
               if (debug)
                 debug_print_line (&hold);
               break;
 
             case 'H':
-              /* See comment above for 'G' regarding the third parameter.  */
-              line_append (&line, &hold, true);
+              line_append (&line, &hold);
               if (debug)
                 debug_print_line (&hold);
               break;
@@ -1592,8 +1496,7 @@ execute_program (struct vector *vec, struct input *input)
               break;
 
             case 'x':
-              /* See comment above for 'g' regarding the third parameter.  */
-              line_exchange (&line, &hold, false);
+              line_exchange (&line, &hold);
               if (debug)
                 {
                   debug_print_line (&line);
@@ -1602,14 +1505,14 @@ execute_program (struct vector *vec, struct input *input)
               break;
 
             case 'y':
-              if (mb_cur_max > 1)
-                translate_mb (cur_cmd->x.translatemb);
+              if (0 < cur_cmd->x.translate.npairs)
+                translate_mb (cur_cmd->x.translate.npairs,
+                              cur_cmd->x.translate.a.pair);
               else
                 {
-                  unsigned char *p, *e;
-                  p = (unsigned char *)line.active;
-                  for (e=p+line.length; p<e; ++p)
-                    *p = cur_cmd->x.translate[*p];
+                  char *e = line.active + line.length;
+                  for (char *p = line.active; p < e; p++)
+                    *p = cur_cmd->x.translate.a.sb[(unsigned char) {*p}];
                 }
               if (debug)
                 debug_print_line (&line);
@@ -1662,9 +1565,9 @@ process_files (struct vector *the_program, char **argv)
   struct input input;
   int status;
 
-  line_init (&line, NULL, INITIAL_BUFFER_SIZE);
-  line_init (&hold, NULL, 0);
-  line_init (&buffer, NULL, 0);
+  line_init (&line, INITIAL_BUFFER_SIZE);
+  line_init (&hold, 0);
+  line_init (&buffer, 0);
 
   input.reset_at_next_file = true;
   if (argv && *argv)
@@ -1696,7 +1599,7 @@ process_files (struct vector *the_program, char **argv)
     }
   closedown (&input);
 
-#ifdef lint
+#ifdef PACIFY_LSAN
   /* We're about to exit, so these free()s are redundant.
      But if we're running under a memory-leak detecting
      implementation of malloc(), we want to explicitly
@@ -1707,7 +1610,7 @@ process_files (struct vector *the_program, char **argv)
   free (hold.text);
   free (line.text);
   free (s_accum.text);
-#endif /* lint */
+#endif
 
   if (input.bad_count)
     status = EXIT_BAD_INPUT;

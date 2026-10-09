@@ -16,14 +16,13 @@
 
 #include "sed.h"
 
-#include <ctype.h>
-#include <limits.h>
-#include <string.h>
-#include <stdckdint.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <xalloc.h>
 
-#include "xalloc.h"
+#include <dfa.h>
+#include <flexmember.h>
+#include <stdckdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 extern bool use_extended_syntax_p;
 
@@ -147,7 +146,7 @@ compile_regex (struct buffer *b, int flags, int needed_sub)
     }
 
   re_len = size_buffer (b);
-  new_regex = xzalloc (sizeof (struct regex) + re_len - 1);
+  new_regex = xzalloc (FLEXSIZEOF (struct regex, re, re_len));
   new_regex->flags = flags;
   memcpy (new_regex->re, get_buffer (b), re_len);
 
@@ -348,7 +347,7 @@ match_regex (struct regex *regex, char *buf, idx_t buflen,
 }
 
 
-#ifdef lint
+#ifdef PACIFY_LSAN
 void
 release_regex (struct regex *regex)
 {
@@ -361,4 +360,4 @@ release_regex (struct regex *regex)
   regfree (&regex->pattern);
   free (regex);
 }
-#endif /* lint */
+#endif

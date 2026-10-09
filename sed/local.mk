@@ -21,7 +21,6 @@ sed_sed_SOURCES =	\
   sed/compile.c		\
   sed/debug.c		\
   sed/execute.c		\
-  sed/mbcs.c		\
   sed/regexp.c		\
   sed/sed.c		\
   sed/utils.c
@@ -45,6 +44,7 @@ DISTCLEANFILES += sed/version.c
 sed/version.c: Makefile
 	$(AM_V_GEN)rm -f $@
 	$(AM_V_at)printf '#include <config.h>\n' > $@t
+	$(AM_V_at)printf '#include "version.h"\n' >> $@t
 	$(AM_V_at)printf 'char const *Version = "$(PACKAGE_VERSION)";\n' >> $@t
 	$(AM_V_at)chmod a-w $@t
 	$(AM_V_at)mv $@t $@

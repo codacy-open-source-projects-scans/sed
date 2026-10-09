@@ -33,54 +33,46 @@ require_en_utf8_locale_
 # (invalid multibyte sequence).
 
 
-# Reject a valid multibyte delimiter (instead of slash).
-printf 's\316\246a\316\246b\316\246' > prog1 || framework_failure_
+# Allow a valid multibyte delimiter (instead of slash).
+printf 's\316\246a\316\246b\316\246\n' > prog1 || framework_failure_
+printf 'abracadabra\n' >in1 || framework_failure_
+printf 'bbracadabra\n' >exp1 || framework_failure_
 
 cat <<\EOF > exp-err1 || framework_failure_
 sed: file prog1 line 1: delimiter character is not a single-byte character
 EOF
 
-returns_ 1 env LC_ALL=en_US.UTF-8 sed -f prog1 < /dev/null 2>err1 || fail=1
-compare_ exp-err1 err1 || fail=1
+env LC_ALL=en_US.UTF-8 sed -f prog1 <in1 >out1 2>err1 || fail=1
+compare_ /dev/null err1 || fail=1
+compare_ exp1 out1 || fail=1
 
+# Allow an incomplete multibyte delimiter (instead of slash).
+# This is an implementation-specific behavior.
+printf 's\316a\316b\316\n' > prog2 || framework_failure_
 
-# Reject an incomplete multibyte delimiter (instead of slash).
-# This is an implmentation-specific behavior:
-# error is triggered upon first octet, before entire multibyte character
-# is scanned.
-printf 's\316a\316b\316' > prog2 || framework_failure_
+env LC_ALL=en_US.UTF-8 sed -f prog2 <in1 >out2 2>err2 || fail=1
+compare_ /dev/null err2 || fail=1
+compare_ exp1 out2 || fail=1
 
-cat <<\EOF > exp-err2 || framework_failure_
-sed: file prog2 line 1: delimiter character is not a single-byte character
-EOF
-
-returns_ 1 env LC_ALL=en_US.UTF-8 sed -f prog2 </dev/null 2>err2 || fail=1
-compare_ exp-err2 err2 || fail=1
-
-# ... but accept octet \316 as delimiter in C locale
-# Skip if C locale is multibyte (e.g., Android bionic defaults to UTF-8).
-if test "$(LC_ALL=C get-mb-cur-max C)" = 1; then
-  echo a > in2 || framework_failure_
-  echo b > exp2 || framework_failure_
-  LC_ALL=C sed -f prog2 <in2 >out2 || fail=1
-  compare_ exp2 out2 || fail=1
-fi
+# ... and accept octet \316 as delimiter in C locale.
+LC_ALL=C sed -f prog2 <in1 >out2 2>err2 || fail=1
+compare_ /dev/null err2 || fail=1
+compare_ exp1 out2 || fail=1
 
 
 
 # An invalid multibyte sequence is treated as a valid single byte,
 # thus accepted as a delimiter (instead of slash).
-# This is an implmentation-specific behavior.
-printf 's\246a\246b\246' > prog3 || framework_failure_
-echo a > in3 || framework_failure_
-echo b > exp3 || framework_failure_
-
-LC_ALL=en_US.UTF-8 sed -f prog3 <in3 >out3 || fail=1
-compare_ exp3 out3 || fail=1
+# This is an implementation-specific behavior.
+printf 's\246a\246b\246\n' > prog3 || framework_failure_
+LC_ALL=en_US.UTF-8 sed -f prog3 <in1 >out3 2>err3 || fail=1
+compare_ /dev/null err3 || fail=1
+compare_ exp1 out3 || fail=1
 
 # Expect identical result in C locale
-LC_ALL=C sed -f prog3 <in3 >out4 || fail=1
-compare_ exp3 out4 || fail=1
+LC_ALL=C sed -f prog3 <in1 >out4 2>err4 || fail=1
+compare_ /dev/null err4 || fail=1
+compare_ exp1 out4 || fail=1
 
 
 Exit $fail

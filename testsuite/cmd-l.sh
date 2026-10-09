@@ -18,9 +18,15 @@
 . "${srcdir=.}/testsuite/init.sh"; path_prepend_ ./sed
 print_ver_ sed
 
+require_en_utf8_locale_
+
 #         10        20        30        40        50        60        70  75
 cat <<\EOF >in1 || framework_failure_
 0123456789012345678901234567890123456789012345678901234567890123456789012345
+EOF
+
+cat <<\EOF >in-non-ascii || framework_failure_
+“”‘’…–—•°§¶™©®€£¥éüñà
 EOF
 
 # default: 70 characters (including the \n)
@@ -71,5 +77,10 @@ compare_ exp-11 out-ln-11 || fail=1
 # limit with 'ln' command (gnu extension)
 returns_ 1 sed --posix -n l11 in1 2>err-posix-ln || fail=1
 compare_ exp-err-posix-ln err-posix-ln || fail=1
+
+# l with non-ASCII printable characters
+LC_ALL=en_US.UTF-8 sed 's/$/\$/' <in-non-ascii >exp-non-ascii || fail=1
+LC_ALL=en_US.UTF-8 sed -n l <in-non-ascii >out-non-ascii || fail=1
+LC_ALL=en_US.UTF-8 compare_ exp-non-ascii out-non-ascii || fail=1
 
 Exit $fail

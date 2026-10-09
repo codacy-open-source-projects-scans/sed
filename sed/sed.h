@@ -15,14 +15,23 @@
     along with this program; If not, see <https://www.gnu.org/licenses/>. */
 
 #include <config.h>
-#include "basicdefs.h"
-#include "dfa.h"
-#include "localeinfo.h"
-#include "regex.h"
-#include <stdio.h>
-#include "unlocked-io.h"
 
 #include "utils.h"
+
+#include <localeinfo.h>
+#include <mcel.h>
+
+#include <regex.h>
+#include <stdint.h>
+
+#include <gettext.h>
+#define _(msgid) gettext (msgid)
+
+_GL_INLINE_HEADER_BEGIN
+
+#ifndef SED_INLINE
+# define SED_INLINE _GL_INLINE
+#endif
 
 /* Struct vector is used to describe a compiled sed program. */
 struct vector {
@@ -54,7 +63,7 @@ struct regex {
   struct dfa *dfa;
   bool begline;
   bool endline;
-  char re[1];
+  char re[FLEXIBLE_ARRAY_MEMBER];
 };
 
 struct readcmd {
@@ -130,8 +139,8 @@ struct subst {
   unsigned print : 2;	/* 'p' option given (before/after eval) */
   unsigned eval : 1;	/* 'e' option given */
   unsigned max_id : 4;  /* maximum backreference on the RHS */
-#ifdef lint
-  char* replacement_buffer;
+#ifdef PACIFY_LSAN
+  char *replacement_buffer;
 #endif
 };
 
@@ -176,8 +185,35 @@ struct sed_cmd {
     struct output *inf;
 
     /* This is used for the y command. */
-    unsigned char *translate;
-    char **translatemb;
+    struct
+    {
+      /* If nonzero, the number of translation pairs used for multibyte
+         translation.  If zero, single-byte translation is in effect.  */
+      idx_t npairs;
+
+      union
+      {
+        /* An array of UCHAR_MAX + 1 bytes used for single-byte translation.
+           sb[(unsigned char) {I}] is the translation of I.  */
+        char *sb;
+
+        /* An array used for multibyte translation.  For 0 <= I < npairs,
+           the translation of pair[I].from is pair[I].to.  */
+        struct trans_pair
+        {
+          /* The character or encding-error byte translated from.
+             A negative value represents a negated encoding error byte
+             instead of the usual char32_t character value.  */
+          int from;
+
+          /* The multibyte representation of the translation.
+             It is always at least one byte long; after that is null
+             terminated unless it is exactly MCEL_LEN_MAX bytes.
+             A null byte is therefore represented by !to[0] && !to[1].  */
+          char to[MCEL_LEN_MAX];
+        } *pair;
+      } a;
+    } translate;
 
     /* This is used for the ':' command (debug only).  */
     char* label_name;
@@ -200,16 +236,14 @@ struct regex *compile_regex (struct buffer *b, int flags, int needed_sub);
 int match_regex (struct regex *regex,
                  char *buf, idx_t buflen, idx_t buf_start_offset,
                  struct re_registers *regarray, int regsize);
-#ifdef lint
 void release_regex (struct regex *);
-#endif
 
 void
 debug_print_command (const struct vector *program, const struct sed_cmd *sc);
 void
 debug_print_program (const struct vector *program);
 void
-debug_print_char (char c);
+debug_print_char (mcel_t g, char const *p);
 
 int process_files (struct vector *, char **argv);
 
@@ -251,37 +285,20 @@ extern char const *write_mode;
 /* Should we use EREs? */
 extern bool use_extended_syntax_p;
 
-/* Declarations for multibyte character sets.  */
-extern int mb_cur_max;
-extern bool is_utf8;
-
 /* If set, operate in 'sandbox' mode - disable e/r/w commands */
 extern bool sandbox;
 
 /* If set, print debugging information.  */
 extern bool debug;
 
-#define MBRTOWC(pwc, s, n, ps) \
-  (mb_cur_max == 1 ? \
-   (*(pwc) = btowc (*(unsigned char *) (s)), 1) : \
-   mbrtowc ((pwc), (s), (n), (ps)))
-
-#define WCRTOMB(s, wc, ps) \
-  (mb_cur_max == 1 ? \
-   (*(s) = wctob ((wint_t) (wc)), 1) : \
-   wcrtomb ((s), (wc), (ps)))
-
-#define MBSINIT(s) \
-  (mb_cur_max == 1 ? 1 : mbsinit ((s)))
-
-#define MBRLEN(s, n, ps) \
-  (mb_cur_max == 1 ? 1 : mbrtowc (NULL, s, n, ps))
-
-#define IS_MB_CHAR(ch, ps)                \
-  (mb_cur_max == 1 ? 0 : is_mb_char (ch, ps))
-
-extern int is_mb_char (int ch, mbstate_t *ps);
-extern void initialize_mbcs (void);
+/* Convert to S the character CH.
+   Return the number of bytes in S's representation.  */
+SED_INLINE idx_t
+c32rtomb1 (char *s, char32_t ch)
+{
+  mbstate_t mbs; mbszero (&mbs);
+  return c32rtomb (s, ch, &mbs);
+}
 
 /* Use this to suppress gcc's '...may be used before initialized' warnings. */
 #ifdef lint
@@ -297,3 +314,5 @@ extern void initialize_mbcs (void);
 #  define FALLTHROUGH __attribute__ ((__fallthrough__))
 # endif
 #endif
+
+_GL_INLINE_HEADER_END

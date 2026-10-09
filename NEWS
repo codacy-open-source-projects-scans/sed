@@ -2,6 +2,42 @@ GNU sed NEWS                                    -*- outline -*-
 
 * Noteworthy changes in release ?.? (????-??-??) [?]
 
+** Bug fixes
+
+  sed --posix no longer warns about escaped special characters in the
+  's' command.
+  [bug introduced in sed 4.10]
+
+  The 'l' command no longer mishandles a printable multibyte character
+  by escaping its individual bytes.
+  [bug present since the beginning]
+
+  The 's' and 'y' commands now support multibyte delimiter characters,
+  e.g., 's替a替b替' is now equivalent to 's/a/b/'.
+  [bug present since the beginning]
+
+  The 'y' command no longer has O(N**2) performance on a multibyte
+  line containing N characters.
+  [performance bug present since the beginning]
+
+  File names with odd characters are now quoted in diagnostics.
+  The quoting style is the same as 'ls --quoting-style=shell-escape'.
+  [bug present since the beginning]
+
+  Any '\c', '\d', '\o', or '\x' at the end of a string that can hold
+  escapes is now treated like other unrecognized escapes.  Formerly
+  the behavior was inconsistent and in rare cases undefined.  In any
+  case the behavior is undocumented so users should not rely on it.
+  [bug present since the beginning]
+
+  The escape '\ci' now means control-I (U+0009 TAB) even in a
+  tr_TR.iso88599 locale where capitalizing 'i' does not yield 'I'.
+  [bug present since the beginning]
+
+  The documentation no longer incorrectly says that the regular
+  expression '.' cannot match an invalid multibyte sequence.
+  [bug introduced in sed 4.2]
+
 
 * Noteworthy changes in release 4.10 (2026-04-21) [stable]
 

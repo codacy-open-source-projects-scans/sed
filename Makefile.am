@@ -35,7 +35,7 @@ SUFFIXES =
 bin_PROGRAMS =
 noinst_LIBRARIES =
 noinst_DATA =
-noinst_HEADERS = basicdefs.h
+noinst_HEADERS =
 DISTCLEANFILES =
 
 EXTRA_DIST += BUGS THANKS.in \

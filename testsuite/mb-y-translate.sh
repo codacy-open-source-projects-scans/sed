@@ -41,7 +41,7 @@ require_en_utf8_locale_
 #
 # Test 1: valid multibyte 'dest-chars'
 #
-printf 'y/a/\316\246/' > p1 || framework_failure_
+printf 'y/a/\316\246/\n' > p1 || framework_failure_
 echo Xa > in1 || framework_failure_
 printf 'X\316\246\n' > exp1 || framework_failure_
 
@@ -62,7 +62,7 @@ fi
 #
 # Test 2: valid multibyte 'src-chars'
 #
-printf 'y/\316\246/a/' > p2 || framework_failure_
+printf 'y/\316\246/a/\n' > p2 || framework_failure_
 printf 'X\316\246\n' > in2 || framework_failure_
 echo Xa > exp2 || framework_failure_
 
@@ -87,22 +87,22 @@ fi
 
 # Test 3: invalid multibyte 'dest-chars'.
 echo Xa > in3 || framework_failure_
-printf 'y/a/\246/' > p3 || framework_failure_
+printf 'y/a/\246/\n' > p3 || framework_failure_
 printf 'X\246\n' > exp3 || framework_failure_
 
 # Test 4: incomplete multibyte 'dest-chars'.
 echo Xa > in4 || framework_failure_
-printf 'y/a/\316/' > p4 || framework_failure_
+printf 'y/a/\316/\n' > p4 || framework_failure_
 printf 'X\316\n' > exp4 || framework_failure_
 
 # Test 5: invalid multibyte 'src-chars'.
 printf 'X\246\n' > in5 || framework_failure_
-printf 'y/\246/a/' > p5 || framework_failure_
+printf 'y/\246/a/\n' > p5 || framework_failure_
 echo Xa > exp5 || framework_failure_
 
 # Test 6: incomplete multibyte 'dest-chars'.
 printf 'X\316\n' > in6 || framework_failure_
-printf 'y/\316/a/' > p6 || framework_failure_
+printf 'y/\316/a/\n' > p6 || framework_failure_
 echo Xa > exp6 || framework_failure_
 
 for t in 3 4 5 6 ;
@@ -120,7 +120,7 @@ done
 # Implementation note: the code path for length check differ between
 # single-byte/multibyte locales. The actual characters don't have to be
 # multibyte themselves.
-printf 'y/abc/d/' > p7 || framework_failure_
+printf 'y/abc/d/\n' > p7 || framework_failure_
 cat <<\EOF > exp-err7 || framework_failure_
 sed: file p7 line 1: 'y' command strings have different lengths
 EOF
@@ -128,7 +128,7 @@ EOF
 returns_ 1 env LC_ALL=en_US.UTF-8 sed -f p7 </dev/null 2>err7 || fail=1
 compare_ exp-err7 err7 || fail=1
 
-printf 'y/a/bcd/' > p8 || framework_failure_
+printf 'y/a/bcd/\n' > p8 || framework_failure_
 cat <<\EOF > exp-err8 || framework_failure_
 sed: file p8 line 1: 'y' command strings have different lengths
 EOF

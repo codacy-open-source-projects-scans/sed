@@ -470,8 +470,9 @@ output as soon as possible.)
 @opindex -z
 @opindex --null-data
 @opindex --zero-terminated
-Treat the input as a set of lines, each terminated by a zero byte
-(the ASCII @samp{NUL} character) instead of a newline.  This option can
+@cindex zero byte
+Treat the input as a set of lines, each terminated by a @dfn{zero byte}
+(all bits zero) instead of a newline.  This option can
 be used with commands like @samp{sort -z} and @samp{find -print0}
 to process arbitrary file names.
 @end table
@@ -609,7 +610,7 @@ sed '/^foo/q42' input.txt > output.txt
 @cindex -e, example
 @cindex -f, example
 Commands within a @var{script} or @var{script-file} can be
-separated by semicolons (@code{;}) or newlines (ASCII 10).
+separated by semicolons (@code{;}) or newlines.
 Multiple scripts can be specified with @option{-e} or @option{-f}
 options.
 
@@ -1524,6 +1525,11 @@ As a @value{SSED} extension, the @code{r} command accepts a zero address,
 inserting a file @emph{before} the first line of the input
 @pxref{Adding a header to multiple files}.
 
+Although this command is a file-oriented counterpart to the @code{a} command,
+which appends lines at the end of the current cycle,
+there is no file-oriented counterpart to the @code{i} command,
+which inserts lines before rather than appending lines after.
+
 @item w @var{filename}
 @findex w (write file) command
 @cindex Write to a file
@@ -1558,8 +1564,8 @@ then append the next line of input to the pattern space.
 If there is no more input then @command{sed} exits without processing
 any more commands.
 
-When @option{-z} is used, a zero byte (the ascii @samp{NUL} character) is
-added between the lines (instead of a new line).
+When @option{-z} is used, a zero byte is added between the lines,
+instead of a newline.
 
 By default @command{sed} does not terminate if there is no 'next' input line.
 This is a GNU extension which can be disabled with @option{--posix}.
@@ -1765,8 +1771,8 @@ file handling holds here too.
 This command empties the content of pattern space.  It is
 usually the same as @samp{s/.*//}, but is more efficient
 and works in the presence of invalid multibyte sequences
-in the input stream.  @sc{posix} mandates that such sequences
-are @emph{not} matched by @samp{.}, so that there is no portable
+in the input stream.  @sc{posix} does not require an invalid multibyte sequence
+to be matched by @samp{.}, so there is no portable
 way to clear @command{sed}'s buffers in the middle of the
 script in most multibyte locales (including UTF-8 locales).
 @end table
@@ -2823,7 +2829,8 @@ Instead, this matches a string consisting of a single dollar sign,
 because it is escaped.
 
 @item [a-zA-Z0-9]
-In the C locale, this matches any ASCII letters or digits.
+In the @samp{C} locale and ASCII character encoding,
+this matches any ASCII letter or digit.
 
 @item [^ @kbd{@key{TAB}}]\+
 (Here @kbd{@key{TAB}} stands for a single tab character.)
@@ -2955,84 +2962,84 @@ $ echo 1 | sed 's/[:digit:]/X/'
 @opindex alnum @r{character class}
 @cindex alphanumeric characters
 Alphanumeric characters:
-@samp{[:alpha:]} and @samp{[:digit:]}; in the @samp{C} locale and ASCII
-character encoding, this is the same as @samp{[0-9A-Za-z]}.
+the same as @samp{[:alpha:][:digit:]};
+in the @samp{C} locale and ASCII character encoding,
+also the same as @samp{A-Za-z0-9}.
 
 @item [:alpha:]
 @opindex alpha @r{character class}
 @cindex alphabetic characters
 Alphabetic characters:
-@samp{[:lower:]} and @samp{[:upper:]}; in the @samp{C} locale and ASCII
-character encoding, this is the same as @samp{[A-Za-z]}.
+the same as @samp{[:upper:][:lower:]};
+in the @samp{C} locale and ASCII encoding,
+also the same as @samp{A-Za-z}.
 
 @item [:blank:]
 @opindex blank @r{character class}
 @cindex blank characters
 Blank characters:
-space and tab.
+in the C locale and ASCII encoding, space and tab.
 
 @item [:cntrl:]
 @opindex cntrl @r{character class}
 @cindex control characters
-Control characters.
-In ASCII, these characters have octal codes 000
-through 037, and 177 (DEL).
-In other character sets, these are
-the equivalent characters, if any.
+Control characters:
+in the C locale and ASCII encoding,
+octal codes 000 through 037 and 177 (DEL).
 
 @item [:digit:]
 @opindex digit @r{character class}
 @cindex digit characters
 @cindex numeric characters
-Digits: @code{0 1 2 3 4 5 6 7 8 9}.
+Digits: in the C locale and ASCII encoding,
+the same as @samp{0-9}.
 
 @item [:graph:]
 @opindex graph @r{character class}
 @cindex graphic characters
 Graphical characters:
-@samp{[:alnum:]} and @samp{[:punct:]}.
+the same as @samp{[:alnum:][:punct:]}.
 
 @item [:lower:]
 @opindex lower @r{character class}
 @cindex lower-case letters
-Lower-case letters; in the @samp{C} locale and ASCII character
-encoding, this is
-@code{a b c d e f g h i j k l m n o p q r s t u v w x y z}.
+Lower-case letters; in the @samp{C} locale and ASCII
+encoding, the same as @code{a-z}.
 
 @item [:print:]
 @opindex print @r{character class}
 @cindex printable characters
 Printable characters:
-@samp{[:alnum:]}, @samp{[:punct:]}, and space.
+the same as @samp{[:graph:]@tie{}},
+i.e., graphical characters and space.
 
 @item [:punct:]
 @opindex punct @r{character class}
 @cindex punctuation characters
-Punctuation characters; in the @samp{C} locale and ASCII character
-encoding, this is
-@code{!@: " # $ % & ' ( ) * + , - .@: / : ; < = > ?@: @@ [ \ ] ^ _ ` @{ | @} ~}.
+Punctuation characters; in the @samp{C} locale and ASCII
+encoding, @samp{[[:punct:]]} is the same as
+@samp{[]!"#$%&'()*+,./:;<=>?@@[\^_`@{|@}~-]}.
 
 @item [:space:]
 @opindex space @r{character class}
 @cindex space characters
 @cindex whitespace characters
-Space characters: in the @samp{C} locale, this is
+Space characters: in the @samp{C} locale and ASCII encoding, this is
 tab, newline, vertical tab, form feed, carriage return, and space.
-
 
 @item [:upper:]
 @opindex upper @r{character class}
 @cindex upper-case letters
-Upper-case letters: in the @samp{C} locale and ASCII character
-encoding, this is
-@code{A B C D E F G H I J K L M N O P Q R S T U V W X Y Z}.
+Upper-case letters: in the @samp{C} locale and ASCII
+encoding, the same as @samp{A-Z}.
 
 @item [:xdigit:]
 @opindex xdigit @r{character class}
 @cindex xdigit class
 @cindex hexadecimal digits
 Hexadecimal digits:
-@code{0 1 2 3 4 5 6 7 8 9 A B C D E F a b c d e f}.
+the same as @samp{0123456789ABCDEFabcdef},
+regardless of locale.
 
 @end table
 Note that the brackets in these class names are
@@ -3043,13 +3050,15 @@ Most meta-characters lose their special meaning inside bracket expressions:
 
 @table @samp
 @item ]
-ends the bracket expression if it's not the first list item.
+ends the bracket expression if it's not the first list item,
+possibly preceded by @samp{^}.
 So, if you want to make the @samp{]} character a list item,
-you must put it first.
+you must put it immediately after @samp{[} or @samp{[^}.
 
 @item -
 represents the range if it's not first or last in a list or the ending point
 of a range.
+To make @samp{-} a list item, it is best to place it last.
 
 @item ^
 represents the characters not in the list.
@@ -3334,20 +3343,29 @@ Produces or matches a so called ``vertical tab'' (@sc{ascii} 11).
 
 @item \c@var{x}
 Produces or matches @kbd{@sc{Control}-@var{x}}, where @var{x} is
-any character.  The precise effect of @samp{\c@var{x}} is as follows:
-if @var{x} is a lower case letter, it is converted to upper case.
-Then bit 6 of the character (hex 40) is inverted.  Thus @samp{\cz} becomes
+any single byte.  The precise effect of @samp{\c@var{x}} is as follows:
+if @var{x} is a lower case ASCII letter,
+it is converted to upper case ASCII using English-language rules.
+Then bit 6 of the byte (hex 40) is inverted.  Thus @samp{\cz} becomes
 hex 1A, but @samp{\c@{} becomes hex 3B, while @samp{\c;} becomes hex 7B.
 
 @item \d@var{xxx}
-Produces or matches a character whose decimal @sc{ascii} value is @var{xxx}.
+Produces or matches a byte whose decimal value is @var{xxx}.
 
 @item \o@var{xxx}
-Produces or matches a character whose octal @sc{ascii} value is @var{xxx}.
+Produces or matches a byte whose octal value is @var{xxx}.
 
 @item \x@var{xx}
-Produces or matches a character whose hexadecimal @sc{ascii} value is @var{xx}.
+Produces or matches a byte whose hexadecimal value is @var{xx}.
 @end table
+
+When not followed by a digit, the @samp{\d@var{xxx}},
+@samp{\o@var{xxx}}, and @samp{\x@var{xx}} escapes can contain just one
+or two digits instead of the full number of digits.  Only the
+low-order eight bits are significant in the specified value.
+Because these escapes and the @samp{\c@var{x}} escape
+deal with bytes and not characters, they can produce or match
+individual bytes of multibyte characters and of invalid multibyte sequences.
 
 @samp{\b} (backspace) was omitted because of the conflict with
 the existing ``word boundary'' meaning.
@@ -3467,13 +3485,14 @@ XXXX
 
 @subsection Invalid multibyte characters
 
-@command{sed}'s regular expressions @emph{do not} match
+@command{sed}'s regular expressions do not necessarily match
 invalid multibyte sequences in a multibyte locale.
 
 @noindent
-In the following examples, the ascii value @code{0xCE} is
+In the following examples, the byte @code{0xCE} is
 an incomplete multibyte character (shown here as @value{unicodeFFFD}).
-The regular expression @samp{.} does not match it:
+The regular expression @samp{.}@: might not match it,
+so the following behavior is allowed though not required:
 
 @codequoteundirected on
 @codequotebacktick on
@@ -3493,8 +3512,8 @@ $ printf 'a\xCEc\n' | sed 's/./X/g' | od -tx1c -An
 @codequoteundirected off
 @codequotebacktick off
 
-@noindent Similarly, the 'catch-all' regular expression @samp{.*} does not
-match the entire line:
+@noindent Similarly, the 'catch-all' regular expression @samp{.*} might not
+match the entire line, so the following behavior is allowed:
 
 @codequoteundirected on
 @codequotebacktick on
@@ -3511,7 +3530,7 @@ $ printf 'a\xCEc\n' | sed 's/.*//' | od -tx1c -An
 @noindent
 @value{SSED} offers the special @command{z} command to clear the
 current pattern space regardless of invalid multibyte characters
-(i.e. it works like @code{s/.*//} but also removes invalid multibyte
+(i.e. it works like @code{s/.*//} but is guaranteed to remove invalid multibyte
 characters):
 
 @codequoteundirected on
@@ -3525,6 +3544,13 @@ $ printf 'a\xCEc\n' | sed 'z' | od -tx1c -An
 @end example
 @codequoteundirected off
 @codequotebacktick off
+
+@c The following is not always true.  At least it's not true of
+@c GNU grep that '.' never matches encoding errors.
+@c Also, it's not clear that the first example is true for GNU sed
+@c on all platforms, e.g., platforms where the C locale uses UTF-8 encoding.
+
+@ignore
 
 @noindent Alternatively, force the @code{C} locale to process
 each octet separately (every octet is a valid character in the @code{C}
@@ -3592,6 +3618,8 @@ $ LC_ALL=C sed '3s/\o316\o316//' invalid.txt > fixed.txt
 @end example
 @codequoteundirected off
 @codequotebacktick off
+
+@end ignore
 
 @subsection Upper/Lower case conversion
 
@@ -4125,7 +4153,7 @@ to the beginning of the program without completing or restarting the cycle.
 If the substitution failed (meaning there were no soft line breaks),
 The @code{t} command will @emph{not} branch. Then, @code{P} will
 print the pattern space content until the first newline, and @code{D}
-will delete the pattern space content until the first new line.
+will delete the pattern space content until the first newline.
 (To learn more about @code{N}, @code{P} and @code{D} commands
 @pxref{Multiline techniques}).
 
@@ -4712,7 +4740,7 @@ By using @command{N} and @command{D} commands, @command{sed} can apply
 regular expressions on multiple lines (that is, multiple lines are stored
 in the pattern space, and the regular expression works on it):
 
-@c NOTE: use 'the@*the' instead of a real new line to prevent
+@c NOTE: use 'the@*the' instead of a newline to prevent
 @c 'make syntax-check' to complain about doubled-words.
 @codequoteundirected on
 @codequotebacktick on
@@ -5853,8 +5881,8 @@ the @env{LC_COLLATE} and @env{LC_CTYPE} environment variables to @samp{C}.
 @cindex Emptying pattern space
 
 This happens if your input stream includes invalid multibyte
-sequences.  @sc{posix} mandates that such sequences
-are @emph{not} matched by @samp{.}, so that @samp{s/.*//} will not clear
+sequences.  @sc{posix} does not require the sequences
+to be matched by @samp{.}, so @samp{s/.*//} will not necessarily clear
 pattern space as you would expect.  In fact, there is no way to clear
 sed's buffers in the middle of the script in most multibyte locales
 (including UTF-8 locales).  For this reason, @value{SSED} provides a @code{z}

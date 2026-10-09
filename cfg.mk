@@ -39,7 +39,6 @@ local-checks-to-skip =			\
   sc_preprocessor_indentation		\
   sc_prohibit_atoi_atof			\
   sc_prohibit_magic_number_exit		\
-  sc_prohibit_strcmp			\
   sc_unmarked_diagnostics		\
   sc_useless_cpp_parens
 
@@ -143,10 +142,10 @@ sc_THANKS_in_duplicates:
 		  1>&2; exit 1; } || :
 
 # Ensure the contributor list stays sorted.  However, if the system's
-# en_US.utf8 locale data is erroneous, give a diagnostic and skip
+# en_US.UTF-8 locale data is erroneous, give a diagnostic and skip
 # this test.  This affects Ubuntu up to at least 22.04.
 sc_THANKS_in_sorted:
-	@printf '%s\n' J.T. Jakub | LC_ALL=en_US.utf8 sort -fc 2>/dev/null \
+	@printf '%s\n' J.T. Jakub | LC_ALL=en_US.UTF-8 sort -fc 2>/dev/null \
 	  && {								\
 	    sed '/^$$/,/^$$/!d;/^$$/d' $(srcdir)/THANKS.in > $@.1 &&	\
 	    LC_ALL=en_US.UTF-8 sort -f -k1,1 $@.1 > $@.2 &&		\
@@ -229,11 +228,10 @@ sc_gitignore_missing:
 		'entries to lib/.gitignore' >&2; exit 1; } || :
 
 
-# Similar to the gnulib maint.mk rule for sc_prohibit_strcmp
-# Use STREQ_LEN or STRPREFIX rather than comparing strncmp == 0, or != 0.
+# Similar to the gnulib maint.mk rule for sc_prohibit_strcmp.
 sc_prohibit_strncmp:
 	@prohibit='^[^#].*str''ncmp *\('				\
-	halt='use STREQ_LEN or STRPREFIX instead of str''ncmp'		\
+	halt='use memeq instead of str''ncmp'				\
 	  $(_sc_search_regexp)
 
 # Ensure that tests don't include a redundant fail=0.
@@ -371,7 +369,7 @@ static-analysis: static-analysis-init static-analysis-config \
                  static-analysis-make
 
 ASAN_FLAGS=-fsanitize=address -fno-omit-frame-pointer
-ASAN_CFLAGS=-O0 -g -Dlint $(ASAN_FLAGS)
+ASAN_CFLAGS=-O0 -g -DPACIFY_LSAN $(ASAN_FLAGS)
 ASAN_LDFLAGS=$(ASAN_FLAGS)
 
 .PHONY: build-asan

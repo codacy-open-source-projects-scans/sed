@@ -14,9 +14,9 @@
     You should have received a copy of the GNU General Public License
     along with this program; If not, see <https://www.gnu.org/licenses/>. */
 
-#include <stdio.h>
+#include <idx.h>
 
-#include "basicdefs.h"
+#include <unlocked-io.h>
 
 enum exit_codes {
                       /* EXIT_SUCCESS is already defined as 0 */
@@ -48,6 +48,7 @@ void remove_cleanup_file (void);
 struct buffer *init_buffer (void) _GL_ATTRIBUTE_MALLOC;
 char *get_buffer (struct buffer const *b) _GL_ATTRIBUTE_PURE;
 idx_t size_buffer (struct buffer const *b) _GL_ATTRIBUTE_PURE;
-char *add_buffer (struct buffer *b, const char *p, idx_t n);
-char *add1_buffer (struct buffer *b, int ch);
+void add1_buffer (struct buffer *b, char ch);
 void free_buffer (struct buffer *b);
+
+char *quotef (char const *arg);

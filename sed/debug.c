@@ -19,28 +19,24 @@
 /* debug.c: debugging functions */
 
 #include "sed.h"
-#include "basicdefs.h"
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
+
 #include <stdlib.h>
-#include <sys/types.h>
 
 /* indentation level when printing the program */
-static int block_level = 0;
+static off_t block_level = 0;
 
 
 void
-debug_print_char (char c)
+debug_print_char (mcel_t g, char const *p)
 {
-  if (ISPRINT (c) && c != '\\')
+  if (c32isprint (g.ch) && g.ch != '\\')
     {
-      putchar (c);
+      fwrite (p, 1, g.len, stdout);
       return;
     }
 
   putchar ('\\');
-  switch (c)
+  switch (g.ch)
     {
     case '\a':
       putchar ('a');
@@ -65,21 +61,22 @@ debug_print_char (char c)
       break;
 
     default:
-      printf ("o%03o", (unsigned int) c);
+      for (idx_t i = 0; i < g.len; i++)
+        printf (&"\\o%03o"[!i], (unsigned int) {(unsigned char) {p[i]}});
     }
 }
 
 static void
 debug_print_regex_pattern (const char *pat, idx_t len)
 {
-  const char *p = pat;
-  while (len--)
+  mcel_t g;
+  char const *plim = pat + len;
+  for (char const *p = pat; p < plim; p += g.len)
     {
-      if (*p == '/')
-        fputs ("\\/", stdout);
-      else
-        debug_print_char (*p);
-      ++p;
+      g = mcel_scan (p, plim);
+      if (g.ch == '/')
+        putchar ('\\');
+      debug_print_char (g, p);
     }
 }
 
@@ -232,32 +229,46 @@ debug_print_subst (const struct subst *s)
 }
 
 static void
+debug_print_mb (int ch)
+{
+  if (ch < 0)
+    fputc (-ch, stdout);
+  else
+    {
+      char buf[MCEL_LEN_MAX];
+      fwrite (buf, 1, c32rtomb1 (buf, ch), stdout);
+    }
+}
+
+static void
 debug_print_translation (const struct sed_cmd *sc)
 {
-  idx_t i;
-
-  if (mb_cur_max > 1)
+  idx_t npairs = sc->x.translate.npairs;
+  if (0 < npairs)
     {
       /* multibyte translation */
       putchar ('/');
-      for (i = 0; sc->x.translatemb[2 * i] != NULL; i++)
-        fputs (sc->x.translatemb[2 * i], stdout);
+      for (idx_t i = 0; i < npairs; i++)
+        debug_print_mb (sc->x.translate.a.pair[i].from);
       putchar ('/');
-      for (i = 0; sc->x.translatemb[2 * i] != NULL; i++)
-        fputs (sc->x.translatemb[2 * i + 1], stdout);
+      for (idx_t i = 0; i < npairs; i++)
+        fwrite (sc->x.translate.a.pair[i].to, 1,
+                1 + strnlen (sc->x.translate.a.pair[i].to + 1,
+                             sizeof sc->x.translate.a.pair[i].to - 1),
+                stdout);
       putchar ('/');
     }
   else
     {
       /* unibyte translation */
       putchar ('/');
-      for (i = 0; i < 256; ++i)
-        if (sc->x.translate[i] != (unsigned char) i)
-          putchar ((unsigned char) i);
+      for (idx_t i = 0; i < UCHAR_MAX + 1; ++i)
+        if (i != (unsigned char) {sc->x.translate.a.sb[i]})
+          putchar (i);
       putchar ('/');
-      for (i = 0; i < 256; ++i)
-        if (sc->x.translate[i] != (unsigned char) i)
-          putchar (sc->x.translate[i]);
+      for (idx_t i = 0; i < UCHAR_MAX + 1; ++i)
+        if (i != (unsigned char) {sc->x.translate.a.sb[i]})
+          putchar (sc->x.translate.a.sb[i]);
       putchar ('/');
     }
 }
@@ -416,7 +427,7 @@ debug_print_command (const struct vector *program, const struct sed_cmd *sc)
   if (sc->cmd == '}')
     --block_level;
 
-  for (int j = 0; j < block_level; ++j)
+  for (off_t j = 0; j < block_level; j++)
     fputs ("  ", stdout);
 
   debug_print_addr (sc->a1);

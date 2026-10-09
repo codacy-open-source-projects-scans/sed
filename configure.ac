@@ -31,6 +31,28 @@ gl_EARLY
 gl_INIT
 gl_DISABLE_THREADS
 
+AC_DEFINE([GNULIB_EXCLUDE_SINGLE_THREAD], [1],
+  [Define if all programs in this package call functions of the Gnulib
+   'exclude' module only from a single thread.])
+AC_DEFINE([GNULIB_LOCALENAME_SINGLE_THREAD], [1],
+  [Define if all programs in this package call functions of the Gnulib
+   'getlocalename_l-simple', 'getlocalename_l-unsafe', and 'localename'
+   modules only from a single thread.])
+AC_DEFINE([GNULIB_MBRTOWC_SINGLE_THREAD], [1],
+  [Define if all programs in this package call functions of the Gnulib
+   'mbtowc' module only from a single thread.])
+AC_DEFINE([GNULIB_REGEX_SINGLE_THREAD], [1],
+  [Define if all programs in this package call functions of the Gnulib
+   'regex' module only from a single thread.])
+AC_DEFINE([GNULIB_WCHAR_SINGLE_LOCALE], [1],
+  [Define if all programs in this package call locale-sensitive functions
+   like mbrtowc only after setting the locale, and never change the
+   locale once set.])
+
+AC_DEFINE([GNULIB_MBRTOC32_REGULAR], [1],
+  [Do not worry about rare encodings like CP864, EBCDIC, Johab, and Shift JIS
+   that glibc does not support.])
+
 # Ensure VLAs are not used.
 # Note -Wvla is implicitly added by gl_MANYWARN_ALL_GCC
 AC_DEFINE([GNULIB_NO_VLA], [1], [Define to 1 to disable use of VLAs])
@@ -56,31 +78,6 @@ AC_DEFUN([gl_GCC_VERSION_IFELSE],
   ]
 )
 
-AC_CACHE_CHECK([whether "rt" can be used with fopen], [sed_cv_fopen_rt], [
-AC_RUN_IFELSE(
-  [AC_LANG_SOURCE([[
-#include <stdio.h>
-#include <errno.h>
-
-int main()
-{
-  FILE *fp;
-  int result;
-  errno = 0;
-  fp = fopen ("conftest.c", "rt");
-  if (fp) fclose (fp);
-  return fp ? 0 : 1;
-}]])], [sed_cv_fopen_rt=yes],
-    [sed_cv_fopen_rt=no],
-    [case $host in
-       *cygwin* | *mingw*) sed_cv_fopen_rt=yes ;;
-       *) sed_cv_fopen_rt='assuming no' ;;
-     esac])])
-if test "$sed_cv_fopen_rt" = yes; then
-  AC_DEFINE([HAVE_FOPEN_RT], [1],
-            [Defined if "rt" can be used as a mode to fopen.])
-fi
-
 AC_CACHE_CHECK([whether -lcP is needed], [sed_cv_libcp_needed], [
 AC_RUN_IFELSE(
   [AC_LANG_SOURCE([[
@@ -105,115 +102,31 @@ if test "$sed_cv_libcp_needed" = yes; then
   LIBS="-lcP $LIBS"
 fi
 
-AC_CHECK_HEADERS_ONCE(locale.h errno.h wchar.h wctype.h mcheck.h,
-                      [], [], [AC_INCLUDES_DEFAULT])
-AC_C_CONST
-AC_TYPE_SIZE_T
-
 AM_GNU_GETTEXT_VERSION([0.19.2])
 AM_GNU_GETTEXT([external])
 
-AC_CHECK_FUNCS_ONCE(isatty isascii memcpy strchr strtoul readlink
-                    popen pathconf fchown fchmod setlocale)
+AC_CHECK_FUNCS_ONCE([readlink popen fchown setlocale])
 
 AM_CONDITIONAL([TEST_SYMLINKS],
           [test "$ac_cv_func_readlink" = yes])
 
-AC_ARG_ENABLE(i18n,
-[  --disable-i18n          disable internationalization (default=enabled)], ,
-enable_i18n=yes)
-if test "x$enable_i18n" = xno; then
-  ac_cv_func_wcscoll=no
-fi
-
-
-# Determine whether we should run UTF-8 tests by checking if cyrillic
-# letters are case-folded properly.  The test for UTF-8 locales (both
-# in general and specifically for a Russian one) is a bit weak, but it
-# should match exactly what is done in the testsuite.  In fact, sed's
-# logic is portable (though testing it requires care) so it is enough to
-# have a couple of platforms where these tests pass.  Right now, only
-# Windows and HP/UX do not support the tests.
-AC_MSG_CHECKING([whether UTF-8 case folding tests should pass])
-AC_RUN_IFELSE(
-  [AC_LANG_SOURCE([[
-#include <locale.h>
-#include <string.h>
-#include <stdlib.h>
-#include <wchar.h>
-#ifdef HAVE_WCTYPE_H
-#include <wctype.h>
-#endif
-
-int test(void)
-{
-  char in[] = "\xD0\xB4";
-  char good[] = "\xD0\x94";
-  char out[10];
-  wchar_t in_wc, good_wc;
-  if (mbtowc (&in_wc, in, 3) == -1)
-    return 0;
-  if (mbtowc (&good_wc, good, 3) == -1)
-    return 0;
-  if (towupper (in_wc) != good_wc)
-    return 0;
-  if (wctomb (out, good_wc) != 2)
-    return 0;
-  if (memcmp (out, good, 2))
-    return 0;
-  return 1;
-}
-
-int main()
-{
-  char *old;
-  int len;
-
-  /* Try hardcoding a Russian UTF-8 locale.  If the name "ru_RU.UTF-8"
-     is invalid, use setlocale again just to get the current locale.  */
-  old = setlocale (LC_CTYPE, "ru_RU.UTF-8");
-  if (old)
-    {
-      if (test())
-        exit (0);
-    }
-  else
-    old = setlocale (LC_CTYPE, "C");
-
-  /* Maybe cyrillic case folding is implemented for all UTF-8 locales.
-     If the current locale is not UTF-8, the test will be skipped.  */
-  len = strlen (old);
-  if ((len > 6 && !strcmp (old + len - 6, ".UTF-8"))
-      || (len > 6 && !strcmp (old + len - 6, ".utf-8"))
-      || (len > 5 && !strcmp (old + len - 5, ".UTF8"))
-      || (len > 5 && !strcmp (old + len - 5, ".utf8")))
-
-    /* ok */
-    ;
-  else
-    exit (1);
-
-  /* Run the test in the detected UTF-8 locale.  */
-  setlocale (LC_CTYPE, old);
-  exit (!test ());
-}
-]])], [AC_MSG_RESULT([yes]); XFAIL_TESTS=],
-   [AC_MSG_RESULT([no]); XFAIL_TESTS='testsuite/utf8-1 testsuite/utf8-2 \
-                                      testsuite/utf8-3 testsuite/utf8-4'],
-   [AC_MSG_RESULT([don't care (cross compiling)]); XFAIL_TESTS=])
+XFAIL_TESTS=
 
 # Under MinGW, the bsd.sh test fails because of the EOF character (^Z).
 case $host in
   *mingw*) XFAIL_TESTS="$XFAIL_TESTS bsd" ;;
-  *) ;;
 esac
 AC_SUBST([XFAIL_TESTS])
 
 AC_ARG_ENABLE([gcc-warnings],
-  [AS_HELP_STRING([--enable-gcc-warnings],
-     [turn on many GCC warnings (for developers; best with GNU make)])],
+  [AS_HELP_STRING([--enable-gcc-warnings@<:@=TYPE@:>@],
+    [control generation of GCC warnings.  The TYPE 'no' disables
+     warnings (default for non-developer builds); 'yes' generates
+     cheap warnings if available (default for developer builds);
+     'expensive' in addition generates expensive-to-compute warnings
+     if available.])],
   [case $enableval in
-     yes|no) ;;
+     no|yes|expensive) ;;
      *)      AC_MSG_ERROR([bad value $enableval for gcc-warnings option]) ;;
    esac
    gl_gcc_warnings=$enableval],
@@ -229,42 +142,43 @@ AC_ARG_ENABLE([gcc-warnings],
                           && gl_gcc_warnings=yes])]
 )
 
-if test "$gl_gcc_warnings" = yes; then
+# clang is unduly picky about some things, even by default.
+if test "$gl_cv_compiler_clang" = yes; then
+  gl_WARN_ADD([-Wno-format-extra-args])
+  gl_WARN_ADD([-Wno-implicit-const-int-float-conversion])
+  gl_WARN_ADD([-Wno-tautological-constant-out-of-range-compare])
+fi
+
+if test $gl_gcc_warnings != no; then
   gl_WARN_ADD([-Werror], [WERROR_CFLAGS])
   AC_SUBST([WERROR_CFLAGS])
 
-  nw=
+  ew=
+  AS_IF([test $gl_gcc_warnings != expensive],
+    [# -fanalyzer and related options slow GCC considerably.
+     ew="$ew -fanalyzer -Wno-analyzer-malloc-leak"])
+
   # This, $nw, is the list of warnings we disable.
-  nw="$nw -Wdeclaration-after-statement" # too useful to forbid
-  nw="$nw -Wsystem-headers"         # Don't let system headers trigger warnings
-  nw="$nw -Wsign-conversion"        # Too many warnings for now
-  nw="$nw -Wswitch-default"         # Too many warnings for now
+  nw=$ew
+  nw="$nw -Wstack-protector"        # not worth working around for pre GCC 15
+  nw="$nw -Wformat-overflow=2"      # False alarms due to GCC bug 110333
+  nw="$nw -Wformat-truncation=2"    # False alarm in ls.c, probably related
+  nw="$nw -Winline"                 # system.h's readdir_ignoring_dot_and_dotdot
+
+  # Using -Wstrict-overflow is a pain, but the alternative is worse.
+  # For an example, see the code that provoked this report:
+  # https://gcc.gnu.org/PR33498
+  # Code like that still infloops with gcc-4.6.0 and -O2.  Scary indeed.
 
   gl_MANYWARN_ALL_GCC([ws])
+  AS_VAR_APPEND([ws], [' -Wswitch-enum'])
+  AS_VAR_APPEND([ws], [' -Wtrailing-whitespace'])
   gl_MANYWARN_COMPLEMENT([ws], [$ws], [$nw])
   for w in $ws; do
     gl_WARN_ADD([$w])
   done
   gl_WARN_ADD([-Wno-sign-compare])     # Too many warnings for now
-  gl_WARN_ADD([-Wno-format-nonliteral]) # ngettext in ck_fwrite
-
-  # clang is unduly picky about some things.
-  AC_CACHE_CHECK([whether the compiler is clang], [utils_cv_clang],
-    [AC_COMPILE_IFELSE(
-       [AC_LANG_PROGRAM([[
-            #ifndef __clang__
-              #error "not clang"
-            #endif
-          ]])],
-       [utils_cv_clang=yes],
-       [utils_cv_clang=no])])
-  if test $utils_cv_clang = yes; then
-    gl_WARN_ADD([-Wno-format-extra-args])
-    gl_WARN_ADD([-Wno-tautological-constant-out-of-range-compare])
-  fi
-
-  gl_WARN_ADD([-fdiagnostics-show-option])
-  gl_WARN_ADD([-funit-at-a-time])
+  gl_WARN_ADD([-Wno-format-nonliteral])
 
   AC_SUBST([WARN_CFLAGS])
 
@@ -275,13 +189,29 @@ if test "$gl_gcc_warnings" = yes; then
    #if !defined _FORTIFY_SOURCE && defined __OPTIMIZE__ && __OPTIMIZE__
    # define _FORTIFY_SOURCE 2
    #endif
-  ])
+])
   AC_DEFINE([GNULIB_PORTCHECK], [1], [enable some gnulib portability checks])
+
+  # We use a slightly smaller set of warning options for lib/.
+  # Remove the following and save the result in GNULIB_WARN_CFLAGS.
+  nw=$ew
+  nw="$nw -Wduplicated-branches"    # Too many false alarms
+  nw="$nw -Wformat-truncation=2"
+  nw="$nw -Wunused-macros"
+
+  gl_MANYWARN_COMPLEMENT([GNULIB_WARN_CFLAGS], [$WARN_CFLAGS], [$nw])
+  AC_SUBST([GNULIB_WARN_CFLAGS])
 
   # For gnulib-tests, the set is slightly smaller still.
   nw=
+  # It's not worth being this picky about test programs.
+  nw="$nw -Wmissing-variable-declarations"
+  nw="$nw -Wsuggest-attribute=cold"
+  nw="$nw -Wsuggest-attribute=const"
+  nw="$nw -Wsuggest-attribute=format"
+  nw="$nw -Wsuggest-attribute=pure"
   gl_MANYWARN_COMPLEMENT([GNULIB_TEST_WARN_CFLAGS],
-                         [$WARN_CFLAGS], [$nw])
+                         [$GNULIB_WARN_CFLAGS], [$nw])
   AC_SUBST([GNULIB_TEST_WARN_CFLAGS])
 fi
 

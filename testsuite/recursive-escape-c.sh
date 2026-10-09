@@ -31,9 +31,7 @@ cat << \EOF > prog1 || framework_failure_
 3s/./\c[/
 4s/./\c]/
 
-# '\c' at end-of-buffer, a backslash is pushed up
-# on level of interpretation, and the '.' match is replaced
-# with one backslash.
+# '\c' at end-of-buffer is an unrecognized escape, so acts like 'c'.
 5s/./\c/
 
 # This would return incorrect results before 4.3,
@@ -42,7 +40,7 @@ cat << \EOF > prog1 || framework_failure_
 EOF
 
 # expected output:
-printf '\001\n\002\n\033\n\035\n\\\n\034\n' > exp1 || framework_failure_
+printf '\001\n\002\n\033\n\035\nc\n\034\n' > exp1 || framework_failure_
 
 #
 # Run simple test cases

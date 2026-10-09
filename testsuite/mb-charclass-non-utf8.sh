@@ -21,11 +21,14 @@
 . "${srcdir=.}/testsuite/init.sh"; path_prepend_ ./sed
 print_ver_ sed
 
+case $(uname -sr) in
+  Darwin' '?.* | Darwin' '1?.* | Darwin' '2[0-4].* | \
+  DragonFly* | FreeBSD* | NetBSD* | OpenBSD*)
+    skip_ "platform's mbrtowc has known Shift JIS bugs";;
+esac
+
 # If found, LOCALE_JA_SJIS will contain the locale name.
 require_ja_shiftjis_locale_
-
-# Ensure the implementation is not buggy (skip otherwise)
-require_valid_ja_shiftjis_locale_ "$LOCALE_JA_SJIS"
 
 # This test uses two characters:
 # Unicode Character 'KATAKANA LETTER ZE' (U+30BC)

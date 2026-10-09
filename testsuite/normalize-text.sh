@@ -51,7 +51,7 @@ compare_ exp2 out2 || fail=1
 #
 # \cX combination
 #
-printf "%s\n" a a a a a a a a a a > in3 || framework_failure_
+printf "%s\n" a a a a a a a a a a a > in3 || framework_failure_
 cat <<\EOF >prog3 || framework_failure_
 1y/a/\cA/
 2y/a/\ca/
@@ -63,19 +63,12 @@ cat <<\EOF >prog3 || framework_failure_
 8y/a/\c[/
 9y/a/\c\\/
 10y/a/\c]/
+11y/a/\c/
 EOF
 
-printf "\1\n\1\n\32\n\32\n;\n{\nc\n\33\n\34\n\35\n" > exp3 || framework_failure_
+printf '\1\n\1\n\32\n\32\n;\n{\nc\n\33\n\34\n\35\nc\n' > exp3 \
+  || framework_failure_
 sed -f prog3 in3 > out3 || fail=1
 compare_ exp3 out3 || fail=1
-
-# \c at end of (valid) text - normalize_text() stops, returns control to caller.
-# TODO: is this a bug?
-#       compare with 'y/a/\d/' and 'y/a/\x/'
-cat <<\EOF >exp-err-c || framework_failure_
-sed: -e expression #1, char 7: 'y' command strings have different lengths
-EOF
-returns_ 1 sed 'y/a/\c/' </dev/null 2>err-c || fail=1
-compare_ exp-err-c err-c || fail=1
 
 Exit $fail

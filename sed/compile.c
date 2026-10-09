@@ -17,17 +17,21 @@
 /* compile.c: translate sed source into internal form */
 
 #include "sed.h"
-#include <stdckdint.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <obstack.h>
-#include "progname.h"
-#include "xalloc.h"
 
-#define YMAP_LENGTH		256 /*XXX shouldn't this be (UCHAR_MAX+1)?*/
+#include <c-ctype.h>
+#include <minmax.h>
+#include <progname.h>
+#include <read-file.h>
+#include <xalloc.h>
+
+#include <errno.h>
+#include <obstack.h>
+#include <stdckdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define obstack_chunk_alloc  xzalloc
+#define obstack_chunk_free   free
 
 /* let's not confuse text editors that have only dumb bracket-matching... */
 #define OPEN_BRACKET	'['
@@ -36,19 +40,16 @@
 #define CLOSE_BRACE	'}'
 
 struct prog_info {
-  /* When we're reading a script command from a string, 'prog.base'
-     points to the first character in the string, 'prog.cur' points
+  /* 'prog.base' points to the first character in the string, 'prog.cur' points
+     to the current character in the string, 'prog.prev' points to the
+     previous character in the string, and 'prog.end' points
      to the current character in the string, and 'prog.end' points
      to the end of the string.  This allows us to compile script
      strings that contain nulls. */
-  const unsigned char *base;
-  const unsigned char *cur;
-  const unsigned char *end;
-
-  /* This is the current script file.  If it is NULL, we are reading
-     from a string stored at 'prog.cur' instead.  If both 'prog.file'
-     and 'prog.cur' are NULL, we're in trouble! */
-  FILE *file;
+  char const *base;
+  char const *prev;
+  char const *cur;
+  char const *end;
 };
 
 /* Information used to give out useful and informative error messages. */
@@ -119,7 +120,7 @@ vbad_prog (char const *why, va_list ap)
 {
   if (cur_input.name)
     fprintf (stderr, _("%s: file %s line %jd: "), program_name,
-             cur_input.name, cur_input.line);
+             quotef (cur_input.name), cur_input.line);
   else
     fprintf (stderr, _("%s: -e expression #%d, char %td: "),
              program_name,
@@ -137,7 +138,6 @@ bad_prog (char const *why, ...)
   va_list ap;
   va_start (ap, why);
   vbad_prog (gettext (why), ap);
-  va_end (ap);
 }
 void
 bad_prog_notranslate (const char *why, ...)
@@ -145,48 +145,37 @@ bad_prog_notranslate (const char *why, ...)
   va_list ap;
   va_start (ap, why);
   vbad_prog (why, ap);
-  va_end (ap);
 }
 
-/* Read the next character from the program.  Return EOF if there isn't
-   anything to read.  Keep cur_input.line up to date, so error messages
-   can be meaningful. */
+enum { INCHAR_EOF = -1 - UCHAR_MAX };
+
+/* Return the next program character as its char32_t encoding,
+   or as -B if the next input is the encoding error byte B.
+   Return INCHAR_EOF if there isn't anything to read.
+   Keep cur_input.line up to date, so error messages can be meaningful. */
 static int
 inchar (void)
 {
-  int ch = EOF;
-
-  if (prog.cur)
-    {
-      if (prog.cur < prog.end)
-        ch = *prog.cur++;
-    }
-  else if (prog.file)
-    {
-      if (!feof (prog.file))
-        ch = getc (prog.file);
-    }
+  char const *p = prog.prev = prog.cur;
+  if (prog.end <= p)
+    return INCHAR_EOF;
+  mcel_t g = mcel_scan (p, prog.end);
+  int ch = g.err ? -g.err : g.ch;
+  prog.cur = p + g.len;
   if (ch == '\n')
     ++cur_input.line;
   return ch;
 }
 
-/* unget 'ch' so the next call to inchar will return it.   */
+/* Undo the previous inchar, unless it said we were at EOF.  */
 static void
-savchar (int ch)
+savchar (void)
 {
-  if (ch == EOF)
+  if (prog.prev == prog.cur)
     return;
-  if (ch == '\n' && cur_input.line > 0)
+  prog.cur = prog.prev;
+  if (*prog.cur == '\n' && cur_input.line > 0)
     --cur_input.line;
-  if (prog.cur)
-    {
-      if (prog.cur <= prog.base || *--prog.cur != ch)
-        panic ("Called savchar with unexpected pushback (%x)",
-               (unsigned int) ch);
-    }
-  else
-    ungetc (ch, prog.file);
 }
 
 /* Read the next non-blank character from the program.  */
@@ -196,7 +185,8 @@ in_nonblank (void)
   int ch;
   do
     ch = inchar ();
-    while (ISBLANK (ch));
+  while (0 < ch && c32isblank (ch));
+
   return ch;
 }
 
@@ -210,8 +200,8 @@ read_end_of_cmd (void)
 {
   const int ch = in_nonblank ();
   if (ch == CLOSE_BRACE || ch == '#')
-    savchar (ch);
-  else if (ch != EOF && ch != '\n' && ch != ';')
+    savchar ();
+  else if (ch != INCHAR_EOF && ch != '\n' && ch != ';')
     bad_prog ("extra characters after command");
 }
 
@@ -222,20 +212,28 @@ in_integer (int ch)
 {
   intmax_t num = 0;
 
-  while (ISDIGIT (ch))
+  while (c_isdigit (ch))
     {
       if (ckd_mul (&num, num, 10) || ckd_add (&num, num, ch - '0'))
         num = INTMAX_MAX;
       ch = inchar ();
     }
-  savchar (ch);
+  savchar ();
   return num;
 }
 
-static int
-add_then_next (struct buffer *b, int ch)
+static void
+add_prev_to_buffer (struct buffer *b)
 {
-  add1_buffer (b, ch);
+  char const *plim = prog.cur;
+  for (char const *p = prog.prev; p < plim; p++)
+    add1_buffer (b, *p);
+}
+
+static int
+add_then_next (struct buffer *b)
+{
+  add_prev_to_buffer (b);
   return inchar ();
 }
 
@@ -243,10 +241,10 @@ static char *
 convert_number (char *result, char *buf, const char *bufend, int base)
 {
   int n = 0;
-  int max = 1;
   char *p;
+  char *plim = buf + MIN (bufend - buf, 2 + (base < 16));
 
-  for (p=buf+1; p < bufend && max <= 255; ++p, max *= base)
+  for (p = buf; p < plim; p++)
     {
       int d = -1;
       switch (*p)
@@ -272,10 +270,8 @@ convert_number (char *result, char *buf, const char *bufend, int base)
         break;
       n = n * base + d;
     }
-  if (p == buf+1)
-    *result = *buf;
-  else
-    *result = n;
+
+  *result = n & UCHAR_MAX;
   return p;
 }
 
@@ -291,17 +287,17 @@ read_filename (void)
 
   b = init_buffer ();
   ch = in_nonblank ();
-  while (ch != EOF && ch != '\n')
+  while (ch != INCHAR_EOF && ch != '\n')
     {
 #if 0 /*XXX ZZZ 1998-09-12 kpp: added, then had second thoughts*/
       if (posixicity == POSIXLY_EXTENDED)
         if (ch == ';' || ch == '#')
           {
-            savchar (ch);
+            savchar ();
             break;
           }
 #endif
-      ch = add_then_next (b, ch);
+      ch = add_then_next (b);
     }
   add1_buffer (b, '\0');
   return b;
@@ -320,7 +316,7 @@ get_openfile (struct output **file_ptrs, const char *mode, int fail)
     bad_prog ("missing filename in r/R/w/W commands");
 
   for (p=*file_ptrs; p; p=p->link)
-    if (strcmp (p->name, file_name) == 0)
+    if (streq (p->name, file_name))
       break;
 
   if (posixicity == POSIXLY_EXTENDED)
@@ -332,7 +328,7 @@ get_openfile (struct output **file_ptrs, const char *mode, int fail)
          cannot be used in the initializer for special_files */
       my_stdin = stdin; my_stdout = stdout; my_stderr = stderr;
       for (special = special_files; special->outf.name; special++)
-        if (strcmp (special->outf.name, file_name) == 0)
+        if (streq (special->outf.name, file_name))
           {
             special->outf.fp = *special->pfp;
             free_buffer (b);
@@ -342,7 +338,7 @@ get_openfile (struct output **file_ptrs, const char *mode, int fail)
 
   if (!p)
     {
-      p = OB_MALLOC (&obs, 1, struct output);
+      p = obstack_alloc (&obs, sizeof *p);
       p->name = xstrdup (file_name);
       p->fp = ck_fopen (p->name, mode, fail);
       p->missing_newline = false;
@@ -362,14 +358,15 @@ next_cmd_entry (struct vector *v)
     v->v = xpalloc (v->v, &v->v_allocated, 1, -1, sizeof *v->v);
 
   cmd = v->v + v->v_length;
-  memset (cmd, 0, sizeof *cmd);
-  cmd->cmd = '\0';	/* something invalid, to catch bugs early */
+
+  /* This sets cmd->cmd to something invalid, to catch bugs early.  */
+  *cmd = (struct sed_cmd) {NULL};
 
   return cmd;
 }
 
 static int
-snarf_char_class (struct buffer *b, mbstate_t *cur_stat)
+snarf_char_class (struct buffer *b)
 {
   int ch;
   int state = 0;
@@ -377,9 +374,9 @@ snarf_char_class (struct buffer *b, mbstate_t *cur_stat)
 
   ch = inchar ();
   if (ch == '^')
-    ch = add_then_next (b, ch);
+    ch = add_then_next (b);
   if (ch == CLOSE_BRACKET)
-    ch = add_then_next (b, ch);
+    ch = add_then_next (b);
 
   /* States are:
         0 outside a collation element, character class or collation class
@@ -387,22 +384,17 @@ snarf_char_class (struct buffer *b, mbstate_t *cur_stat)
         2 after the opening ./:/=
         3 after the closing ./:/= */
 
-  for (;; ch = add_then_next (b, ch))
+  for (;; ch = add_then_next (b))
     {
-      const int mb_char = IS_MB_CHAR (ch, cur_stat);
-
       switch (ch)
         {
-        case EOF:
+        case INCHAR_EOF:
         case '\n':
           return ch;
 
         case '.':
         case ':':
         case '=':
-          if (mb_char)
-            continue;
-
           if (state == 1)
             {
               delim = ch;
@@ -416,17 +408,11 @@ snarf_char_class (struct buffer *b, mbstate_t *cur_stat)
           continue;
 
         case OPEN_BRACKET:
-          if (mb_char)
-            continue;
-
           if (state == 0)
             state = 1;
           continue;
 
         case CLOSE_BRACKET:
-          if (mb_char)
-            continue;
-
           if (state == 0 || state == 1)
             return ch;
           else if (state == 3)
@@ -450,62 +436,60 @@ match_slash (int slash, bool regex, bool s_command)
 {
   struct buffer *b;
   int ch;
-  mbstate_t cur_stat = { 0, };
-
-  /* We allow only 1 byte characters for a slash.  */
-  if (IS_MB_CHAR (slash, &cur_stat))
-    bad_prog ("delimiter character is not a single-byte character");
-
-  memset (&cur_stat, 0, sizeof cur_stat);
 
   b = init_buffer ();
-  while ((ch = inchar ()) != EOF && ch != '\n')
+  while ((ch = inchar ()) != INCHAR_EOF && ch != '\n')
     {
-      const int mb_char = IS_MB_CHAR (ch, &cur_stat);
-
-      if (!mb_char)
+      if (ch == slash)
+        return b;
+      else if (ch == '\\')
         {
-          if (ch == slash)
-            return b;
-          else if (ch == '\\')
+          ch = inchar ();
+          if (ch == INCHAR_EOF)
+            break;
+          /* Preserve backslash except when escaping delimiter in regex.  */
+          if (ch != '\n' && (ch != slash || (!regex && ch == '&')))
+            add1_buffer (b, '\\');
+          /* Special case: in regex, treat \cX as atomic escape,
+             but only in GNU-extension mode (not strict POSIX).  */
+          if (regex && ch == 'c' && posixicity != POSIXLY_BASIC)
             {
-              ch = inchar ();
-              if (ch == EOF)
+              add_prev_to_buffer (b);
+              int next = inchar ();
+              if (next == INCHAR_EOF)
                 break;
-              /* Preserve backslash except when escaping delimiter in regex. */
-              if (ch != '\n' && (ch != slash || (!regex && ch == '&')))
-                add1_buffer (b, '\\');
-              /* Special case: in regex, treat \cX as atomic escape,
-                 but only in GNU-extension mode (not strict POSIX).  */
-              if (regex && ch == 'c' && posixicity != POSIXLY_BASIC) {
-                add1_buffer (b, ch);
-                int next = inchar ();
-                if (next == EOF)
-                  break;
-                add1_buffer (b, next);
-                /* Skip end-of-loop add1_buffer, we already did it.  */
-                continue;
-              }
-              if (s_command && posixicity != POSIXLY_EXTENDED && ch != '&'
-                  && ch != '\\' && !ISDIGIT (ch) && ch != '\n' && ch != slash)
-                fprintf (stderr, _("%s: warning: using \"\\%c\" in the 's' "
-                                   "command is not portable\n"),
-                         program_name, ch);
+              add_prev_to_buffer (b);
+              /* Skip end-of-loop add_prev_to_buffer; we already did it.  */
+              continue;
             }
-          else if (ch == OPEN_BRACKET && regex)
-            {
-              add1_buffer (b, ch);
-              ch = snarf_char_class (b, &cur_stat);
-              if (ch != CLOSE_BRACKET)
-                break;
-            }
+          /* Warn for some non-portable backslash escapes if --posix is
+             in use.  Note that we ignore any special characters, although
+             they may be non-portable in some contexts.  */
+          if (s_command && posixicity != POSIXLY_EXTENDED
+              && ! (ch == slash
+                    || ch == '&' || ch == '\\' || c_isdigit (ch) || ch == '\n'
+                    || ch == '.' || ch == '*' || ch == '^' || ch == '$'
+                    || ch == '(' || ch == ')' || ch == '{' || ch == '}'
+                    || ch == OPEN_BRACKET
+                    || (extended_regexp_flags & REG_EXTENDED
+                        && (ch == '+' || ch == '?' || ch == '|'))))
+            fprintf (stderr, _("%s: warning: using \"\\%.*s\" in the 's' "
+                               "command is not portable\n"),
+                     program_name, (int) {prog.cur - prog.prev}, prog.prev);
+        }
+      else if (ch == OPEN_BRACKET && regex)
+        {
+          add_prev_to_buffer (b);
+          ch = snarf_char_class (b);
+          if (ch != CLOSE_BRACKET)
+            break;
         }
 
-      add1_buffer (b, ch);
+      add_prev_to_buffer (b);
     }
 
   if (ch == '\n')
-    savchar (ch);	/* for proper line number in error report */
+    savchar ();	/* for proper line number in error report */
   free_buffer (b);
   return NULL;
 }
@@ -572,9 +556,9 @@ mark_subst_opts (struct subst *cmd)
 
       case CLOSE_BRACE:
       case '#':
-        savchar (ch);
+        savchar ();
         FALLTHROUGH;
-      case EOF:
+      case INCHAR_EOF:
       case '\n':
       case ';':
         return flags;
@@ -583,10 +567,8 @@ mark_subst_opts (struct subst *cmd)
         if (inchar () == '\n')
           return flags;
         FALLTHROUGH;
-
       default:
         bad_prog ("unknown option to 's'");
-        unreachable ();
       }
 }
 
@@ -601,11 +583,12 @@ read_label (void)
   b = init_buffer ();
   ch = in_nonblank ();
 
-  while (ch != EOF && ch != '\n'
-         && !ISBLANK (ch) && ch != ';' && ch != CLOSE_BRACE && ch != '#')
-    ch = add_then_next (b, ch);
+  while (ch != INCHAR_EOF && ch != '\n'
+         && ch != ';' && ch != CLOSE_BRACE && ch != '#'
+         && !(0 <= ch && c32isblank (ch)))
+    ch = add_then_next (b);
 
-  savchar (ch);
+  savchar ();
   add1_buffer (b, '\0');
   ret = xstrdup (get_buffer (b));
   free_buffer (b);
@@ -620,11 +603,11 @@ static struct sed_label *
 setup_label (struct sed_label *list, idx_t idx, char *name,
              const struct error_info *err_info)
 {
-  struct sed_label *ret = OB_MALLOC (&obs, 1, struct sed_label);
+  struct sed_label *ret = obstack_alloc (&obs, sizeof *ret);
   ret->v_index = idx;
   ret->name = name;
   if (err_info)
-    memcpy (&ret->err_info, err_info, sizeof (ret->err_info));
+    ret->err_info = *err_info;
   ret->next = list;
   return ret;
 }
@@ -650,7 +633,7 @@ release_label (struct sed_label *list_head)
 static struct replacement *
 new_replacement (char *text, idx_t length, enum replacement_types type)
 {
-  struct replacement *r = OB_MALLOC (&obs, 1, struct replacement);
+  struct replacement *r = obstack_alloc (&obs, sizeof *r);
 
   r->prefix = text;
   r->prefix_length = length;
@@ -672,10 +655,12 @@ setup_replacement (struct subst *sub, const char *text, idx_t length)
   struct replacement *tail;
 
   sub->max_id = 0;
-  base = MEMDUP (text, length, char);
+  base = xmemdup (text, length);
   length = normalize_text (base, length, TEXT_REPLACEMENT);
 
-  IF_LINT (sub->replacement_buffer = base);
+#ifdef PACIFY_LSAN
+  sub->replacement_buffer = base;
+#endif
 
   text_end = base + length;
   tail = &root;
@@ -696,7 +681,7 @@ setup_replacement (struct subst *sub, const char *text, idx_t length)
           if (p == text_end)
             ++tail->prefix_length;
 
-          else if (posixicity == POSIXLY_BASIC && !ISDIGIT (*p))
+          else if (posixicity == POSIXLY_BASIC && !c_isdigit (*p))
             {
               p[-1] = *p;
               ++tail->prefix_length;
@@ -781,29 +766,29 @@ read_text (struct text_buf *buf, int leadin_ch)
     }
   /* assert(old_text_buf != NULL); */
 
-  if (leadin_ch == EOF)
+  if (leadin_ch == INCHAR_EOF)
     return;
 
   if (leadin_ch != '\n')
-    add1_buffer (pending_text, leadin_ch);
+    add_prev_to_buffer (pending_text);
 
   ch = inchar ();
-  while (ch != EOF && ch != '\n')
+  while (ch != INCHAR_EOF && ch != '\n')
     {
       if (ch == '\\')
         {
           ch = inchar ();
-          if (ch != EOF)
+          if (ch != INCHAR_EOF)
             add1_buffer (pending_text, '\\');
         }
 
-      if (ch == EOF)
+      if (ch == INCHAR_EOF)
         {
           add1_buffer (pending_text, '\n');
           return;
         }
 
-      ch = add_then_next (pending_text, ch);
+      ch = add_then_next (pending_text);
     }
 
   add1_buffer (pending_text, '\n');
@@ -811,7 +796,7 @@ read_text (struct text_buf *buf, int leadin_ch)
     buf = old_text_buf;
   buf->text_length = normalize_text (get_buffer (pending_text),
                                      size_buffer (pending_text), TEXT_BUFFER);
-  buf->text = MEMDUP (get_buffer (pending_text), buf->text_length, char);
+  buf->text = xmemdup (get_buffer (pending_text), buf->text_length);
   free_buffer (pending_text);
   pending_text = NULL;
 }
@@ -855,21 +840,21 @@ compile_address (struct addr *addr, int ch)
 
             default:
             posix_address_modifier:
-              savchar (ch);
+              savchar ();
               addr->addr_regex = compile_regex (b, flags, 0);
               free_buffer (b);
               return true;
             }
         }
     }
-  else if (ISDIGIT (ch))
+  else if (c_isdigit (ch))
     {
       addr->addr_number = in_integer (ch);
       addr->addr_type = ADDR_IS_NUM;
       ch = in_nonblank ();
       if (ch != '~' || posixicity == POSIXLY_BASIC)
         {
-          savchar (ch);
+          savchar ();
         }
       else
         {
@@ -926,9 +911,9 @@ compile_program (struct vector *vector)
     {
       struct addr a;
 
-      while ((ch=inchar ()) == ';' || ISSPACE (ch))
+      while (0 <= (ch = inchar ()) && (c32isspace (ch) || ch == ';'))
         ;
-      if (ch == EOF)
+      if (ch == INCHAR_EOF)
         break;
 
       cur_cmd = next_cmd_entry (vector);
@@ -938,14 +923,14 @@ compile_program (struct vector *vector)
               || a.addr_type == ADDR_IS_STEP_MOD)
             bad_prog ("invalid usage of +N or ~N as first address");
 
-          cur_cmd->a1 = MEMDUP (&a, 1, struct addr);
+          cur_cmd->a1 = xmemdup (&a, sizeof a);
           ch = in_nonblank ();
           if (ch == ',')
             {
               if (!compile_address (&a, in_nonblank ()))
                 bad_prog ("unexpected ','");
 
-              cur_cmd->a2 = MEMDUP (&a, 1, struct addr);
+              cur_cmd->a2 = xmemdup (&a, sizeof a);
               ch = in_nonblank ();
             }
 
@@ -972,7 +957,6 @@ compile_program (struct vector *vector)
            case 'e': case 'F': case 'v': case 'z':
            case 'Q': case 'T': case 'R': case 'W':
              bad_prog ("unknown command: '%c'", ch);
-             FALLTHROUGH;
 
             case 'a': case 'i': case 'l':
             case '=': case 'r':
@@ -988,10 +972,9 @@ compile_program (struct vector *vector)
             bad_prog ("comments don't accept any addresses");
           ch = inchar ();
           if (ch=='n' && first_script && cur_input.line < 2)
-            if (   (prog.base && prog.cur==2+prog.base)
-                || (prog.file && !prog.base && 2==ftell (prog.file)))
+            if (prog.cur - prog.base == 2)
               no_default_output = true;
-          while (ch != EOF && ch != '\n')
+          while (ch != INCHAR_EOF && ch != '\n')
             ch = inchar ();
           continue;	/* restart the for (;;) loop */
 
@@ -1034,7 +1017,7 @@ compile_program (struct vector *vector)
             bad_prog ("e/r/w commands disabled in sandbox mode");
 
           ch = in_nonblank ();
-          if (ch == EOF || ch == '\n')
+          if (ch == INCHAR_EOF || ch == '\n')
             {
               cur_cmd->x.cmd_txt.text_length = 0;
               break;
@@ -1048,7 +1031,7 @@ compile_program (struct vector *vector)
           ch = in_nonblank ();
 
         read_text_to_slash:
-          if (ch == EOF)
+          if (ch == INCHAR_EOF)
             bad_prog ("expected \\ after 'a', 'c' or 'i'");
 
           if (ch == '\\')
@@ -1057,7 +1040,7 @@ compile_program (struct vector *vector)
             {
               if (posixicity == POSIXLY_BASIC)
                 bad_prog ("expected \\ after 'a', 'c' or 'i'");
-              savchar (ch);
+              savchar ();
               ch = '\n';
             }
 
@@ -1092,14 +1075,14 @@ compile_program (struct vector *vector)
 
         case 'l':
           ch = in_nonblank ();
-          if (ISDIGIT (ch) && posixicity != POSIXLY_BASIC)
+          if (c_isdigit (ch) && posixicity != POSIXLY_BASIC)
             {
               cur_cmd->x.int_arg = in_integer (ch);
             }
           else
             {
               cur_cmd->x.int_arg = -1;
-              savchar (ch);
+              savchar ();
             }
 
           read_end_of_cmd ();
@@ -1165,7 +1148,8 @@ compile_program (struct vector *vector)
             if ( !(b2 = match_slash (slash, false, true)) )
               bad_prog ("unterminated 's' command");
 
-            cur_cmd->x.cmd_subst = OB_MALLOC (&obs, 1, struct subst);
+            cur_cmd->x.cmd_subst
+              = obstack_alloc (&obs, sizeof *cur_cmd->x.cmd_subst);
             setup_replacement (cur_cmd->x.cmd_subst,
                                get_buffer (b2), size_buffer (b2));
             free_buffer (b2);
@@ -1198,84 +1182,66 @@ compile_program (struct vector *vector)
             dest_buf = get_buffer (b2);
             dest_len = normalize_text (dest_buf, size_buffer (b2), TEXT_BUFFER);
 
-            if (mb_cur_max > 1)
+            /* If multibyte, count the source buffer's characters.  */
+            idx_t src_char_num = 0;
+            if (localeinfo.multibyte)
+              for (idx_t i = 0; i < len;
+                   i += mcel_scan (src_buf + i, src_buf + len).len)
+                src_char_num++;
+            cur_cmd->x.translate.npairs = src_char_num;
+
+            if (src_char_num)
               {
-                idx_t i, j, idx, src_char_num;
-                idx_t *src_lens = XNMALLOC (len, idx_t);
-                char **trans_pairs;
-                size_t mbclen;
-                mbstate_t cur_stat = { 0, };
+                idx_t idx = 0;
 
-                /* Enumerate how many character the source buffer has.  */
-                for (i = 0, j = 0; i < len;)
-                  {
-                    mbclen = MBRLEN (src_buf + i, len - i, &cur_stat);
-                    /* An invalid sequence, or a truncated multibyte character.
-                       We treat it as a single-byte character.  */
-                    if (mbclen == (size_t) -1 || mbclen == (size_t) -2
-                        || mbclen == 0)
-                      mbclen = 1;
-                    src_lens[j++] = mbclen;
-                    i += mbclen;
-                  }
-                src_char_num = j;
-
-                memset (&cur_stat, 0, sizeof cur_stat);
-                idx = 0;
-
-                /* trans_pairs = {src(0), dest(0), src(1), dest(1), ..., NULL}
-                     src(i) : pointer to i-th source character.
-                     dest(i) : pointer to i-th destination character.
-                     NULL : terminator */
-                trans_pairs = XNMALLOC (2 * src_char_num + 1, char *);
-                cur_cmd->x.translatemb = trans_pairs;
-                for (i = 0; i < src_char_num; i++)
+                /* trans_pairs = {src(0), dest(0), src(1), dest(1), ... }
+                     src(i) : i-th source character.
+                     dest(i) : i-th destination character.  */
+                struct trans_pair *trans_pair = xnmalloc (src_char_num,
+                                                          sizeof *trans_pair);
+                cur_cmd->x.translate.a.pair = trans_pair;
+                for (idx_t i = 0; i < src_char_num; i++)
                   {
                     if (idx >= dest_len)
                       bad_prog ("'y' command strings have different lengths");
 
                     /* Set the i-th source character.  */
-                    trans_pairs[2 * i] = XNMALLOC (src_lens[i] + 1, char);
-                    memcpy (trans_pairs[2 * i], src_buf, src_lens[i]);
-                    trans_pairs[2 * i][src_lens[i]] = '\0';
-                    src_buf += src_lens[i]; /* Forward to next character.  */
+                    mcel_t s = mcel_scan (src_buf, src_buf + len);
+                    trans_pair[i].from = s.err ? -s.err : s.ch;
+                    src_buf += s.len; /* Forward to next character.  */
+                    len -= s.len;
 
                     /* Fetch the i-th destination character.  */
-                    mbclen = MBRLEN (dest_buf + idx, dest_len - idx, &cur_stat);
-                    /* An invalid sequence, or a truncated multibyte character.
-                       We treat it as a single-byte character.  */
-                    if (mbclen == (size_t) -1 || mbclen == (size_t) -2
-                        || mbclen == 0)
-                      mbclen = 1;
+                    mcel_t d = mcel_scan (dest_buf + idx, dest_buf + dest_len);
 
                     /* Set the i-th destination character.  */
-                    trans_pairs[2 * i + 1] = XNMALLOC (mbclen + 1, char);
-                    memcpy (trans_pairs[2 * i + 1], dest_buf + idx, mbclen);
-                    trans_pairs[2 * i + 1][mbclen] = '\0';
-                    idx += mbclen; /* Forward to next character.  */
+                    memcpy (trans_pair[i].to, dest_buf + idx, d.len);
+                    if (d.len < sizeof trans_pair[i].to)
+                      trans_pair[i].to[d.len] = '\0';
+                    idx += d.len; /* Forward to next character.  */
                   }
-                trans_pairs[2 * i] = NULL;
                 if (idx != dest_len)
                   bad_prog ("'y' command strings have different lengths");
-
-                IF_LINT (free (src_lens));
               }
             else
               {
-                unsigned char *translate =
-                  OB_MALLOC (&obs, YMAP_LENGTH, unsigned char);
-                unsigned char *ustring = (unsigned char *)src_buf;
+                /* A single-byte locale, or a no-op empty translation y///
+                   in a multibyte locale.  */
+                char *translate = obstack_alloc (&obs, UCHAR_MAX + 1);
+                char *ustring = src_buf;
 
                 if (len != dest_len)
                   bad_prog ("'y' command strings have different lengths");
 
-                for (len = 0; len < YMAP_LENGTH; len++)
-                  translate[len] = len;
+                /* The default translation of a character is itself.
+                   Don't trap on debugging platforms if char is signed.  */
+                for (idx_t i = 0; i < UCHAR_MAX + 1; i++)
+                  translate[i] = i <= CHAR_MAX ? i : i - (UCHAR_MAX + 1);
 
                 while (dest_len--)
-                  translate[*ustring++] = (unsigned char)*dest_buf++;
+                  translate[(unsigned char) {*ustring++}] = *dest_buf++;
 
-                cur_cmd->x.translate = translate;
+                cur_cmd->x.translate.a.sb = translate;
               }
 
             read_end_of_cmd ();
@@ -1285,7 +1251,7 @@ compile_program (struct vector *vector)
           }
         break;
 
-        case EOF:
+        case INCHAR_EOF:
           bad_prog ("missing command");
           unreachable ();
 
@@ -1309,8 +1275,6 @@ normalize_text (char *buf, idx_t len, enum text_types buftype)
   const char *bufend = buf + len;
   char *p = buf;
   char *q = buf;
-  char ch;
-  int base;
 
   /* This variable prevents normalizing text within bracket
      subexpressions when conforming to POSIX.  If 0, we
@@ -1320,36 +1284,31 @@ normalize_text (char *buf, idx_t len, enum text_types buftype)
      respectively within these three types of subexpressions.  */
   int bracket_state = 0;
 
-  size_t mbclen;
-  mbstate_t cur_stat = { 0, };
-
   while (p < bufend)
     {
-      mbclen = MBRLEN (p, bufend - p, &cur_stat);
+      idx_t mbclen = mcel_scan (p, bufend).len;
       if (mbclen != 1)
         {
-          /* An invalid sequence, or a truncated multibyte character.
-             We treat it as a single-byte character.  */
-          if (mbclen == (size_t) -1 || mbclen == (size_t) -2 || mbclen == 0)
-            mbclen = 1;
-
           memmove (q, p, mbclen);
           q += mbclen;
           p += mbclen;
           continue;
         }
 
-      if (*p == '\\' && p+1 < bufend && bracket_state == 0)
+      int base;
+      char ch = *p;
+
+      if (ch == '\\' && p + 1 < bufend && bracket_state == 0)
         switch (*++p)
           {
-          case 'a': *q++ = '\a'; p++; continue;
-          /* case 'b': *q++ = '\b'; p++; continue; --- conflicts with \b RE */
-          case 'f': *q++ = '\f'; p++; continue;
+          case 'a': ch = '\a'; break;
+          /* case 'b' would conflict with \b RE.  */
+          case 'f': ch = '\f'; break;
           case '\n': /*fall through */
-          case 'n': *q++ = '\n'; p++; continue;
-          case 'r': *q++ = '\r'; p++; continue;
-          case 't': *q++ = '\t'; p++; continue;
-          case 'v': *q++ = '\v'; p++; continue;
+          case 'n': ch = '\n'; break;
+          case 'r': ch = '\r'; break;
+          case 't': ch = '\t'; break;
+          case 'v': ch = '\v'; break;
 
           case 'd': /* decimal byte */
             base = 10;
@@ -1362,39 +1321,38 @@ normalize_text (char *buf, idx_t len, enum text_types buftype)
           case 'o': /* octal byte */
             base = 8;
 convert:
-            p = convert_number (&ch, p, bufend, base);
+            if (bufend - p < 2)
+              goto unrecognized_escape;
+            char *p1 = convert_number (&ch, p + 1, bufend, base);
+            if (p1 == p + 1)
+              goto unrecognized_escape;
+            p = p1 - 1;
 
-            /* for an ampersand in a replacement, pass the \ up one level */
+            /* Re-escape any escaped & or \ in a replacement.  */
             if (buftype == TEXT_REPLACEMENT && (ch == '&' || ch == '\\'))
               *q++ = '\\';
-            *q++ = ch;
-            continue;
+            break;
 
           case 'c':
-            if (++p < bufend)
+            if (bufend - p < 2)
+              goto unrecognized_escape;
+            p++;
+
+            ch = c_toupper (*p) ^ 0x40;
+            if (*p == '\\')
               {
-                *q++ = toupper ((unsigned char) *p) ^ 0x40;
-                if (*p == '\\')
-                  {
-                    p++;
-                    if (*p != '\\')
-                      bad_prog ("recursive escaping after \\c not allowed");
-                  }
                 p++;
-                continue;
+                if (! (p < bufend && *p == '\\'))
+                  bad_prog ("recursive escaping after \\c not allowed");
               }
-            else
-              {
-                /* we just pass the \ up one level for interpretation */
-                if (buftype != TEXT_BUFFER)
-                  *q++ = '\\';
-                continue;
-              }
+            break;
 
           default:
+          unrecognized_escape:
             /* we just pass the \ up one level for interpretation */
             if (buftype != TEXT_BUFFER)
               *q++ = '\\';
+            ch = *p;
             break;
           }
       else if (buftype == TEXT_REGEX && posixicity != POSIXLY_EXTENDED)
@@ -1422,7 +1380,8 @@ convert:
             break;
           }
 
-      *q++ = *p++;
+      *q++ = ch;
+      p++;
     }
     return q - buf;
 }
@@ -1436,9 +1395,8 @@ compile_string (struct vector *cur_program, char *str, idx_t len)
   static int string_expr_count;
   struct vector *ret;
 
-  prog.file = NULL;
-  prog.base = (unsigned char *)str;
-  prog.cur = prog.base;
+  prog.base = str;
+  prog.prev = prog.cur = prog.base;
   prog.end = prog.cur + len;
 
   cur_input.line = 0;
@@ -1447,7 +1405,7 @@ compile_string (struct vector *cur_program, char *str, idx_t len)
 
   ret = compile_program (cur_program);
   prog.base = NULL;
-  prog.cur = NULL;
+  prog.prev = prog.cur = NULL;
   prog.end = NULL;
 
   first_script = false;
@@ -1461,25 +1419,27 @@ struct vector *
 compile_file (struct vector *cur_program, const char *cmdfile)
 {
   struct vector *ret;
+  size_t len;
+  char *str = (streq (cmdfile, "-")
+               ? fread_file (stdin, 0, &len)
+               : read_file (cmdfile, 0, &len));
 
-  prog.file = stdin;
-  if (cmdfile[0] != '-' || cmdfile[1] != '\0')
-    {
-#ifdef HAVE_FOPEN_RT
-      prog.file = ck_fopen (cmdfile, "rt", true);
-#else
-      prog.file = ck_fopen (cmdfile, "r", true);
-#endif
-    }
+  if (!str)
+    panic (_("couldn't read file %s: %s"), quotef (cmdfile), strerror (errno));
+
+  prog.base = str;
+  prog.prev = prog.cur = prog.base;
+  prog.end = prog.cur + len;
 
   cur_input.line = 1;
   cur_input.name = cmdfile;
   cur_input.string_expr_count = 0;
 
   ret = compile_program (cur_program);
-  if (prog.file != stdin)
-    ck_fclose (prog.file);
-  prog.file = NULL;
+  free (str);
+  prog.base = NULL;
+  prog.prev = prog.cur = NULL;
+  prog.end = NULL;
 
   first_script = false;
   return ret;
@@ -1520,7 +1480,7 @@ check_final_program (struct vector *program)
   if (blocks)
     {
       /* update info for error reporting: */
-      memcpy (&cur_input, &blocks->err_info, sizeof (cur_input));
+      cur_input = blocks->err_info;
       bad_prog ("unmatched '{'");
     }
 
@@ -1529,8 +1489,8 @@ check_final_program (struct vector *program)
     {
       old_text_buf->text_length = size_buffer (pending_text);
       if (old_text_buf->text_length)
-        old_text_buf->text = MEMDUP (get_buffer (pending_text),
-                                     old_text_buf->text_length, char);
+        old_text_buf->text = xmemdup (get_buffer (pending_text),
+                                      old_text_buf->text_length);
       free_buffer (pending_text);
       pending_text = NULL;
     }
@@ -1538,7 +1498,7 @@ check_final_program (struct vector *program)
   for (go = jumps; go; go = release_label (go))
     {
       for (lbl = labels; lbl; lbl = lbl->next)
-        if (strcmp (lbl->name, go->name) == 0)
+        if (streq (lbl->name, go->name))
           break;
       if (lbl)
         {
@@ -1604,8 +1564,8 @@ finish_program (struct vector *program)
     file_read = file_write = NULL;
   }
 
-#ifdef lint
-  for (int i = 0; i < program->v_length; ++i)
+#ifdef PACIFY_LSAN
+  for (idx_t i = 0; i < program->v_length; ++i)
     {
       const struct sed_cmd *sc = &program->v[i];
 
@@ -1627,6 +1587,6 @@ finish_program (struct vector *program)
   obstack_free (&obs, NULL);
 #else
   (void)program;
-#endif /* lint */
+#endif
 
 }

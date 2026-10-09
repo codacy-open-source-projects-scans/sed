@@ -15,3 +15,5 @@
 #
 
 include lib/gnulib.mk
+
+EXTRA_DIST += lib/glthread/lock.h
